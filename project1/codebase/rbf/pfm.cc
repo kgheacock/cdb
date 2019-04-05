@@ -23,13 +23,18 @@ PagedFileManager::~PagedFileManager()
 
 RC PagedFileManager::createFile(const string &fileName)
 {
-    return -1;
+	struct stat buf;
+	if(stat(fileName.c_str(), &buf)==0)
+		return -1;
+	FILE * pf;
+	pf = fopen(fileName.c_str(), "wb");
+    return 0;
 }
 
 
 RC PagedFileManager::destroyFile(const string &fileName)
 {
-    return -1;
+    return remove(fileName.c_str());
 }
 
 
