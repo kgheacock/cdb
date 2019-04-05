@@ -24,16 +24,18 @@ PagedFileManager::~PagedFileManager()
 RC PagedFileManager::createFile(const string &fileName)
 {
 	struct stat buf;
+	//Stat returns 0 if the file exists
 	if(stat(fileName.c_str(), &buf)==0)
 		return -1;
-	FILE * pf;
-	pf = fopen(fileName.c_str(), "wb");
+	//Write in binary mode. B flag indicates binary
+	fopen(fileName.c_str(), "wb");
     return 0;
 }
 
 
 RC PagedFileManager::destroyFile(const string &fileName)
 {
+	//remove returns non-zero value on failure
     return remove(fileName.c_str());
 }
 
