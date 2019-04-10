@@ -79,7 +79,15 @@ RC PagedFileManager::closeFile(FileHandle &fileHandle)
 
 RC FileHandle::readPage(PageNum pageNum, void *data)
 {
-    return -1;
+    auto n = getNumberOfPages();
+    if (pageNum >= n) { // Note: We count pages starting from 0.
+        return -1;
+    }
+
+    fs->seekg(pageNum * PAGE_SIZE);
+    fs->read(static_cast<char *>(data), PAGE_SIZE);
+    readPageCounter++;
+    return 0;
 }
 
 
@@ -100,11 +108,11 @@ RC FileHandle::appendPage(const void *data)
 
     const string nullPageString(static_cast<size_t>(PAGE_SIZE), '\0');
     fs->write(nullPageString.c_str(), static_cast<streamsize>(PAGE_SIZE));
-    appendPageCounter++;
 
     fs->seekp(startOfNewPage);
 
     fs->write(static_cast<const char*>(data), static_cast<streamsize>(PAGE_SIZE));
+    appendPageCounter++;
     return 0;
 }
 
