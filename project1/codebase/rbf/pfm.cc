@@ -125,6 +125,6 @@ RC FileHandle::collectCounterValues(unsigned &readPageCount, unsigned &writePage
     readPageCount = readPageCounter;
     writePageCount = writePageCounter;
     appendPageCount = appendPageCounter;
-	return 0;
+    return 0;
 }
 

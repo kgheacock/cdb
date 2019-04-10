@@ -12,7 +12,7 @@ using namespace std;
 // Record ID
 typedef struct
 {
-  unsigned pageNum;	// page number
+  unsigned pageNum; // page number
   unsigned slotNum; // slot number in the page
 } RID;
 
@@ -35,7 +35,7 @@ typedef enum { EQ_OP = 0, // no condition// =
            GT_OP,      // >
            GE_OP,      // >=
            NE_OP,      // !=
-           NO_OP	   // no condition
+           NO_OP       // no condition
 } CompOp;
 
 

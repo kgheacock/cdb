@@ -20,16 +20,16 @@ class FileHandle;
 class PagedFileManager
 {
 public:
-    static PagedFileManager* instance();                     			// Access to the _pf_manager instance
+    static PagedFileManager* instance();                                // Access to the _pf_manager instance
 
-    RC createFile    (const string &fileName);                         	// Create a new file
-    RC destroyFile   (const string &fileName);                         	// Destroy a file
-    RC openFile      (const string &fileName, FileHandle &fileHandle); 	// Open a file
-    RC closeFile     (FileHandle &fileHandle);                         	// Close a file
+    RC createFile    (const string &fileName);                          // Create a new file
+    RC destroyFile   (const string &fileName);                          // Destroy a file
+    RC openFile      (const string &fileName, FileHandle &fileHandle);  // Open a file
+    RC closeFile     (FileHandle &fileHandle);                          // Close a file
 
 protected:
-    PagedFileManager();                                   				// Constructor
-    ~PagedFileManager();                                  				// Destructor
+    PagedFileManager();                                                 // Constructor
+    ~PagedFileManager();                                                // Destructor
 
 private:
     static PagedFileManager *_pf_manager;
@@ -40,11 +40,11 @@ class FileHandle
 {
 public:
     // variables to keep the counter for each operation
-	unsigned readPageCounter;
-	unsigned writePageCounter;
-	unsigned appendPageCounter;
+    unsigned readPageCounter;
+    unsigned writePageCounter;
+    unsigned appendPageCounter;
     unique_ptr<fstream> fs;
-	
+    
     FileHandle(): readPageCounter{0}, writePageCounter{0}, appendPageCounter{0}, fs{nullptr} {}
     ~FileHandle() {
         if (isHandling()) {
