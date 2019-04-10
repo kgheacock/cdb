@@ -107,11 +107,11 @@ RC FileHandle::appendPage(const void *data)
     }
 
     const string nullPageString(static_cast<size_t>(PAGE_SIZE), '\0');
-    fs->write(nullPageString.c_str(), static_cast<streamsize>(PAGE_SIZE));
+    fs->write(nullPageString.c_str(), PAGE_SIZE);
 
     fs->seekp(startOfNewPage);
 
-    fs->write(static_cast<const char*>(data), static_cast<streamsize>(PAGE_SIZE));
+    fs->write(static_cast<const char*>(data), PAGE_SIZE);
     appendPageCounter++;
     return 0;
 }
