@@ -91,7 +91,21 @@ RC FileHandle::writePage(PageNum pageNum, const void *data)
 
 RC FileHandle::appendPage(const void *data)
 {
-    return -1;
+    fs->seekp(0, fs->end);
+
+    auto startOfNewPage = fs->tellp();
+    if (startOfNewPage == -1) {
+        return -1;
+    }
+
+    const string nullPageString(static_cast<size_t>(PAGE_SIZE), '\0');
+    fs->write(nullPageString.c_str(), static_cast<streamsize>(PAGE_SIZE));
+    appendPageCounter++;
+
+    fs->seekp(startOfNewPage);
+
+    fs->write(static_cast<const char*>(data), static_cast<streamsize>(PAGE_SIZE));
+    return 0;
 }
 
 
@@ -101,20 +115,12 @@ unsigned FileHandle::getNumberOfPages()
         return 0;
     }
 
-    // Used for restoring our position so we don't have a side effect.
-    auto initialPosition = fs->tellg();
-    if (initialPosition == -1) {
-        return 0;
-    }
+    fs->seekg(0, fs->end);
 
-    // Get file length.
-    fs->seekg(0, fs->end); // Seek to the end.
     auto len = fs->tellg();
     if (len == -1) {
         return 0;
     }
-
-    fs->seekg(initialPosition); 
     
     return len / PAGE_SIZE;
 }
