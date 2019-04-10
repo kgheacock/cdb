@@ -29,7 +29,9 @@ PagedFileManager::PagedFileManager()
 
 PagedFileManager::~PagedFileManager()
 {
-    // TODO: fix valgrind errors/warnings.
+    if (_pf_manager) {
+        delete _pf_manager;
+    }
 }
 
 
@@ -65,6 +67,7 @@ RC PagedFileManager::openFile(const string &fileName, FileHandle &fileHandle)
     }
 
     fileHandle.fs = std::move(fs);
+    fileHandle.fname = fileName;
     return 0;
 }
 
@@ -77,6 +80,7 @@ RC PagedFileManager::closeFile(FileHandle &fileHandle)
 
     fileHandle.fs->close();
     fileHandle.fs = nullptr;
+    fileHandle.fname.clear();
     return 0;
 }
 
@@ -113,19 +117,17 @@ RC FileHandle::writePage(PageNum pageNum, const void *data)
 
 RC FileHandle::appendPage(const void *data)
 {
-    fs->seekp(0, fs->end);
+    string dataPage {static_cast<const char *>(data), 0, PAGE_SIZE};
 
-    auto startOfNewPage = fs->tellp();
-    if (startOfNewPage == -1) {
-        return -1;
+    size_t remainingBytes = PAGE_SIZE - dataPage.length();
+    bool pageNotFilled = remainingBytes > 0;
+
+    if (pageNotFilled) {
+        dataPage.append(remainingBytes, '\0');
     }
 
-    const string nullPageString(static_cast<size_t>(PAGE_SIZE), '\0');
-    fs->write(nullPageString.c_str(), PAGE_SIZE);
-
-    fs->seekp(startOfNewPage);
-
-    fs->write(static_cast<const char*>(data), PAGE_SIZE);
+    fs->seekp(0, fs->end);
+    fs->write(dataPage.c_str(), PAGE_SIZE);
     appendPageCounter++;
     return 0;
 }
@@ -137,14 +139,9 @@ unsigned FileHandle::getNumberOfPages()
         return 0;
     }
 
-    fs->seekg(0, fs->end);
-
-    auto len = fs->tellg();
-    if (len == -1) {
-        return 0;
-    }
-    
-    return len / PAGE_SIZE;
+    struct stat buf;
+    auto rc = stat(fname.c_str(), &buf);
+    return rc == 0 ? buf.st_size / PAGE_SIZE : 0;
 }
 
 

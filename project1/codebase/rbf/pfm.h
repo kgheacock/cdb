@@ -44,8 +44,9 @@ public:
     unsigned writePageCounter;
     unsigned appendPageCounter;
     unique_ptr<fstream> fs;
+    string fname; // To help identify the file fs is handling.
     
-    FileHandle(): readPageCounter{0}, writePageCounter{0}, appendPageCounter{0}, fs{nullptr} {}
+    FileHandle(): readPageCounter{0}, writePageCounter{0}, appendPageCounter{0}, fs{nullptr}, fname{} {}
     ~FileHandle() {
         if (isHandling()) {
             fs->close();
