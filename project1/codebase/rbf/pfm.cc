@@ -7,6 +7,10 @@ bool fileExists(const string &fileName) {
     return stat(fileName.c_str(), &buf) == 0 ? true : false;
 }
 
+unsigned long getPageStartingByteOffset(PageNum pageNum) {
+    return pageNum * PAGE_SIZE;
+}
+
 PagedFileManager* PagedFileManager::_pf_manager = 0;
 
 PagedFileManager* PagedFileManager::instance()
@@ -79,12 +83,11 @@ RC PagedFileManager::closeFile(FileHandle &fileHandle)
 
 RC FileHandle::readPage(PageNum pageNum, void *data)
 {
-    auto n = getNumberOfPages();
-    if (pageNum >= n) { // Note: We count pages starting from 0.
+    if (pageNum >= getNumberOfPages()) { // Note: We count pages starting from 0.
         return -1;
     }
 
-    fs->seekg(pageNum * PAGE_SIZE);
+    fs->seekg(getPageStartingByteOffset(pageNum));
     fs->read(static_cast<char *>(data), PAGE_SIZE);
     readPageCounter++;
     return 0;
@@ -93,7 +96,18 @@ RC FileHandle::readPage(PageNum pageNum, void *data)
 
 RC FileHandle::writePage(PageNum pageNum, const void *data)
 {
-    return -1;
+    auto n = getNumberOfPages();
+    if (pageNum > n) {
+        return -1;
+    }
+    if (pageNum == n) {
+        return appendPage(data);
+    }
+
+    fs->seekp(getPageStartingByteOffset(pageNum));
+    fs->write(static_cast<const char *>(data), PAGE_SIZE);
+    writePageCounter++;
+    return 0;
 }
 
 
