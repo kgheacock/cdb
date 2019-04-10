@@ -9,6 +9,8 @@ typedef char byte;
 #include <string>
 #include <climits>
 #include <cstdio>
+#include <fstream>
+#include <memory>
 #include <iostream>
 #include <sys/stat.h>
 using namespace std;
@@ -41,15 +43,24 @@ public:
 	unsigned readPageCounter;
 	unsigned writePageCounter;
 	unsigned appendPageCounter;
+    unique_ptr<fstream> fs;
 	
-    FileHandle();                                                    	// Default constructor
-    ~FileHandle();                                                   	// Destructor
+    FileHandle(): readPageCounter{0}, writePageCounter{0}, appendPageCounter{0}, fs{nullptr} {}
+    ~FileHandle() {
+        if (isHandling()) {
+            fs->close();
+        }
+    }
 
     RC readPage(PageNum pageNum, void *data);                           // Get a specific page
     RC writePage(PageNum pageNum, const void *data);                    // Write a specific page
     RC appendPage(const void *data);                                    // Append a specific page
     unsigned getNumberOfPages();                                        // Get the number of pages in the file
     RC collectCounterValues(unsigned &readPageCount, unsigned &writePageCount, unsigned &appendPageCount);  // Put the current counter values into variables
+
+    bool isHandling() {
+        return fs != nullptr && fs->is_open();
+    }
 }; 
 
 #endif
