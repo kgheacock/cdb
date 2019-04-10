@@ -87,6 +87,10 @@ RC PagedFileManager::closeFile(FileHandle &fileHandle)
 
 RC FileHandle::readPage(PageNum pageNum, void *data)
 {
+    if (!isHandling()) {
+        return -1;
+    }
+
     if (pageNum >= getNumberOfPages()) { // Note: We count pages starting from 0.
         return -1;
     }
@@ -100,11 +104,14 @@ RC FileHandle::readPage(PageNum pageNum, void *data)
 
 RC FileHandle::writePage(PageNum pageNum, const void *data)
 {
+    if (!isHandling()) {
+        return -1;
+    }
+
     auto n = getNumberOfPages();
     if (pageNum > n) {
         return -1;
-    }
-    if (pageNum == n) {
+    } else if (pageNum == n) {
         return appendPage(data);
     }
 
@@ -117,6 +124,10 @@ RC FileHandle::writePage(PageNum pageNum, const void *data)
 
 RC FileHandle::appendPage(const void *data)
 {
+    if (!isHandling()) {
+        return -1;
+    }
+
     string dataPage {static_cast<const char *>(data), 0, PAGE_SIZE};
 
     size_t remainingBytes = PAGE_SIZE - dataPage.length();
