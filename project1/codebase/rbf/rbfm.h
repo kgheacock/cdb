@@ -71,6 +71,7 @@ class RecordBasedFileManager
 {
 public:
   static RecordBasedFileManager* instance();
+  static PagedFileManager* pfm; // Pfm object for calling fileIO functions
 
   RC createFile(const string &fileName);
   
