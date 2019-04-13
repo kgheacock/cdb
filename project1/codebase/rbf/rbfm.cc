@@ -2,6 +2,8 @@
 
 RecordBasedFileManager* RecordBasedFileManager::_rbf_manager = 0;
 
+PagedFileManager* RecordBasedFileManager::pfm;
+
 RecordBasedFileManager* RecordBasedFileManager::instance()
 
 {
