@@ -25,6 +25,41 @@ RecordBasedFileManager::~RecordBasedFileManager()
     }
 }
 
+size_t getSlotSize() {
+    return sizeof(uint32_t) * 2;
+}
+
+/* todo 
+
+unsigned long RecrodBasedFileManager::getFreeSpace
+
+unsigned long RecordBasedFileManager::getRecordSize (const vector<Attribute> &recordDescriptor, const void *data) {
+
+}
+
+bool RecordBasedFileManager::recordFits(PageNum page, int recordSize) {
+    return recordSize + getSlotSize() <= getFreeSpace(page);
+}
+
+
+PageNum RecordBasedFileManager::findPageForRecord (FileHandle &fileHandle, const void *record) {
+    n = fileHandle.getNumPages();
+    PageNum page = n - 1;
+    recordSize = getRecordSize();
+    if (recordFits(page, recordSize) {
+        return page;
+    }
+    for (page_i = 0; page_i < n - 1; page_i++){
+        if (recordFits(page_i, record) {
+            return page_i;
+        }
+    }
+    pfm->appendPage();
+    return n;
+}
+
+*/
+  
 RC RecordBasedFileManager::createFile(const string &fileName) {
     return pfm->createFile(fileName);
 }
