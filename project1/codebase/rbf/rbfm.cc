@@ -202,7 +202,7 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
     }
     free(page);
     free(nullsIndicator);
-    return -1;
+    return 0;
 }
 
 // The format is as follows:
