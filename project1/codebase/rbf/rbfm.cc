@@ -28,10 +28,6 @@ RecordBasedFileManager::~RecordBasedFileManager()
     }
 }
 
-size_t getSlotSize()
-{
-    return sizeof(uint32_t) * 2;
-}
 /* SLOT: [uint32_t length, uint32_t offset] 
    0-indexed
 */
@@ -43,10 +39,10 @@ int findOffset(int slotNum, const void *page, int *length = nullptr)
     int slotOffset = PAGE_SIZE - freeSpacePointerLength - slotCounterLength - SlotSize * (slotNum + 1);
     if (length != nullptr)
     {
-        memcpy(length, page + slotOffset, sizeof(uint32_t));
+        memcpy(length, (char *)page + slotOffset, sizeof(uint32_t));
     }
     slotOffset += sizeof(uint32_t);
-    memcpy(&offset, page + slotOffset, sizeof(uint32_t));
+    memcpy(&offset, (char *)page + slotOffset, sizeof(uint32_t));
     return offset;
 }
 /* todo 
