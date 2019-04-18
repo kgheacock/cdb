@@ -22,10 +22,6 @@ RecordBasedFileManager::RecordBasedFileManager()
 
 RecordBasedFileManager::~RecordBasedFileManager()
 {
-    if (_rbf_manager)
-    {
-        delete _rbf_manager;
-    }
 }
 
 /* SLOT: [uint32_t length, uint32_t offset] 

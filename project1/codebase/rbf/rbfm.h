@@ -9,6 +9,8 @@
 
 #include "../rbf/pfm.h"
 
+extern const size_t SlotSize;
+
 using namespace std;
 
 // Record ID
