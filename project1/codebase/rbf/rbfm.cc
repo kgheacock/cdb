@@ -171,5 +171,6 @@ RC RecordBasedFileManager::printRecord(const vector<Attribute> &recordDescriptor
         ++index;
     }
     std::cout << std::endl;
+    free(nullsIndicator);
     return 0;
 }
