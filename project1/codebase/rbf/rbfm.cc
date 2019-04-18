@@ -134,7 +134,10 @@ RC RecordBasedFileManager::printRecord(const vector<Attribute> &recordDescriptor
         bool nullBit = nullsIndicator[(index + 1) / CHAR_BIT] & (1 << nullBitPosition);
         //If the null indicator is 1 then skip this iteration
         if (nullBit)
+        {
+            cout << "NULL ";
             continue;
+        }
         switch (descriptor.type)
         {
         case TypeInt:
