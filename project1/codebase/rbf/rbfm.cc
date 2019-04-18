@@ -30,10 +30,24 @@ size_t getSlotSize()
 {
     return sizeof(uint32_t) * 2;
 }
-
 /* todo 
 
-unsigned long RecrodBasedFileManager::getFreeSpace
+long long RecrodBasedFileManager::getFreeSpace (const String fileName, Filehandle &fileHandle, PageNum page) {
+    long long pageOffset,freeSpaceStart, freeSpaceEnd;
+    char* freeSpaceOffset, numSlots;
+    
+    pageOffset = (page + 1) * sizeOfPage - 4;
+    fs->seekg(pageOffset);               // seek to page free space offset 
+    fs->read(freeSpaceOffset, 4);        // get free space offset
+    fs->seekg(freeSpaceOffset, fs.cur);  // seek to beginnig of free space from current position 
+    freeSpaceStart = fs->tellg;          // get absolute position
+
+    fs->seekg(pageOffset -4);            
+    fs->read(numSlots, 4);               
+    fs->seekg(-numberOfSlots * 2, fs.cur); // seek to end of free space
+    freeSpaceEnd = fs->tellg;              // get absolute position                
+    return freeSpaceEnd - freeSpaceStart;  // return size of free space
+}
 
 unsigned long RecordBasedFileManager::getRecordSize (const vector<Attribute> &recordDescriptor, const void *data) {
 
@@ -42,7 +56,6 @@ unsigned long RecordBasedFileManager::getRecordSize (const vector<Attribute> &re
 bool RecordBasedFileManager::recordFits(PageNum page, int recordSize) {
     return recordSize + getSlotSize() <= getFreeSpace(page);
 }
-
 
 PageNum RecordBasedFileManager::findPageForRecord (FileHandle &fileHandle, const void *record) {
     n = fileHandle.getNumPages();
