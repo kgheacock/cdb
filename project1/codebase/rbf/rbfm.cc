@@ -6,6 +6,12 @@ const size_t SlotSize = 2 * sizeof(uint32_t);
 
 PagedFileManager *RecordBasedFileManager::pfm;
 
+//https://stackoverflow.com/questions/12276675/modulus-with-negative-numbers-in-c
+
+int mod(int a, int b)
+{
+    return ((a % b) + b) % b;
+}
 RecordBasedFileManager *RecordBasedFileManager::instance()
 
 {
@@ -110,9 +116,92 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 {
     return -1;
 }
-
+//EXAMPLE RECORD LAYOUT: [byteArray:nullFlags, int*:pointerToIntegerField, float*:pointerToRealField, void*:pointerToVarCharField, int:integerField, float:realField, int:lengthOfVarCharField, charArray:varCharField]
 RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, void *data)
 {
+
+    //read page into memory
+    void *page = malloc(PAGE_SIZE);
+    fileHandle.readPage(rid.pageNum, page);
+
+    //find the offset of the record in the page
+    int length = 0;
+    int recordOffset = findOffset(rid.slotNum, page, &length);
+    int positionInData = 0;
+    int positionInRecord = 0;
+
+    //Calculate the length of the null bits field
+    int numberOfFields = recordDescriptor.size();
+    int nullFlagLength = ceil((double)numberOfFields / CHAR_BIT);
+    unsigned char *nullsIndicator = (unsigned char *)malloc(nullFlagLength);
+
+    //Retrieve the null flags, write them to data and advance the position
+    memcpy(nullsIndicator, (char *)page + recordOffset, nullFlagLength);
+    memcpy(data, nullsIndicator, nullFlagLength);
+    positionInData += nullFlagLength;
+    positionInRecord += nullFlagLength;
+
+    int index = 0;
+    for (Attribute descriptor : recordDescriptor)
+    {
+        ++index;
+        //Where in the 8 bits is the flag? The Most Significant Bit is bit 7 and Least 0
+        int nullBitPosition = (CHAR_BIT) - (index % CHAR_BIT);
+        //1 array element for every CHAR_BIT fields so [0] = 0:7 [1] = 8:15 etc.
+        //Create a Mask with a "1" in the correct position and AND it with the value of nullsIndicator
+        bool nullBit = nullsIndicator[(index + 1) / CHAR_BIT] & (1 << nullBitPosition);
+        if (!nullBit)
+        {
+            switch (descriptor.type)
+            {
+            case TypeInt:
+            {
+                //Declare an empty double pointer and copy the value of the record pointer into it.
+                //(note:) Dereference recordPointerPointer once to get the value of the pointer and twice to get
+                //the value of the data at that position
+                int **recordPointerPointer = nullptr;
+                memcpy(recordPointerPointer, (char *)page + recordOffset + positionInRecord, sizeof(uint32_t));
+
+                //copy the memory at *recordPointer to data
+                memcpy((char *)data + positionInRecord, *recordPointerPointer, sizeof(uint32_t));
+                positionInRecord += sizeof(uint32_t);
+                positionInData += sizeof(uint32_t);
+            }
+            break;
+            case TypeReal:
+            {
+                //Declare an empty double pointer and copy the value of the record pointer into it.
+                //(note:) Dereference recordPointerPointer once to get the value of the pointer and twice to get
+                //the value of the data at that position
+                float **recordPointerPointer = nullptr;
+                memcpy(recordPointerPointer, (char *)page + recordOffset + positionInRecord, sizeof(uint32_t));
+
+                //copy the memory at *recordPointer to data
+                memcpy((char *)data + positionInRecord, *recordPointerPointer, sizeof(uint32_t));
+                positionInRecord += sizeof(uint32_t);
+                positionInData += sizeof(uint32_t);
+            }
+            break;
+            case TypeVarChar:
+            {
+                //Declare an empty double pointer and copy the value of the record into it
+                //(note:) Dereference recordPointerPointer once to get the value of the pointer and twice to get
+                //the value of the data at that position
+                void **varCharRecordPointerPointer = nullptr;
+                memcpy(varCharRecordPointerPointer, (char *)page + recordOffset + positionInRecord, sizeof(uint32_t));
+                //Find the length of the varchar field by copying the first 4 bytes of the record
+                int *sizeOfVarCharPointer = nullptr;
+                memcpy(sizeOfVarCharPointer, *varCharRecordPointerPointer, sizeof(uint32_t));
+
+                //Copy the varChar field of length *sizeOfVarCharPointer*sizeof(char)+sizeof(uint32_t) <-for the length of the size indicator
+                memcpy((char *)data + positionInRecord, *varCharRecordPointerPointer, (*sizeOfVarCharPointer) * sizeof(char) + sizeof(uint32_t));
+            }
+            break;
+            }
+        }
+    }
+    free(page);
+    free(nullsIndicator);
     return -1;
 }
 
@@ -139,7 +228,9 @@ RC RecordBasedFileManager::printRecord(const vector<Attribute> &recordDescriptor
         ++index;
         cout << descriptor.name << ": ";
         //Where in the 8 bits is the flag? The Most Significant Bit is bit 7 and Least 0
-        int nullBitPosition = (CHAR_BIT)-index;
+        //SEE SLACK CHAT FOR EXPLAINATION: https://cmps181group.slack.com/archives/CHR7PLWT1/p1555617848047000
+        //NOTE: -a MOD b =
+        int nullBitPosition = mod(-1 * index, CHAR_BIT);
         //1 array element for every CHAR_BIT fields so [0] = 0:7 [1] = 8:15 etc.
         //Create a Mask with a "1" in the correct position and AND it with the value of nullsIndicator
         bool nullBit = nullsIndicator[(index + 1) / CHAR_BIT] & (1 << nullBitPosition);
