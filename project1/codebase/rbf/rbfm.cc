@@ -130,7 +130,7 @@ RC RecordBasedFileManager::printRecord(const vector<Attribute> &recordDescriptor
     unsigned char *nullsIndicator = (unsigned char *)malloc(nullFlagLength);
 
     //Retrieve the null flags and advance the position
-    memcpy(&nullsIndicator, (char *)data, nullFlagLength);
+    memcpy(nullsIndicator, (char *)data, nullFlagLength);
     position += nullFlagLength;
 
     int index = 0;
