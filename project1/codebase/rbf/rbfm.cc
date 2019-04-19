@@ -101,6 +101,7 @@ const void *getWritableRecord(const vector<Attribute> &recordDescriptor, const v
     int recordPreviousValueEnd = recordValuesStart;
 
     cout << "WRITING\n";
+    cout << "recordPreviousValueEnd: " << recordPreviousValueEnd << "\n";
 
     int index = 0;
     for (Attribute descriptor : recordDescriptor)
@@ -163,6 +164,7 @@ const void *getWritableRecord(const vector<Attribute> &recordDescriptor, const v
 
         // "Point" field offset at end of value.
         const uint32_t recordCurrentValueEnd = recordCurrentValueStart + fieldSize;
+        cout << "recordCurrentValueEnd: " << recordCurrentValueEnd << "\n";
         memcpy(record + positionInRecord, &recordCurrentValueEnd, fieldOffsetSize);
         positionInRecord += fieldOffsetSize;
 
@@ -309,7 +311,7 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
     const uint32_t freeSpaceOffsetPosition = PAGE_END_INDEX;
     uint32_t *freeSpaceOffsetValue = (uint32_t *)page + freeSpaceOffsetPosition;
     cout << "freeSpaceOffsetPos: " << freeSpaceOffsetPosition << "\n";
-    cout << "freeSpaceOFfsetValue: " << *freeSpaceOffsetValue << "\n";
+    cout << "freeSpaceOffsetValue: " << *freeSpaceOffsetValue << "\n";
 
     const uint32_t slotCountPosition = freeSpaceOffsetPosition - 1;
     uint32_t *slotCount = (uint32_t *)page + slotCountPosition;
@@ -361,13 +363,26 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
     unsigned char *nullsIndicator = (unsigned char *)malloc(nullFlagLength);
 
     //Retrieve the null flags, write them to data and advance the position
-    const char *record = (char *)page + recordOffset + sizeof(uint32_t); // Skip over the first number of fields.
+    const char *record = (char *)page + recordOffset; // Skip over the first number of fields.
     memcpy(nullsIndicator, record, nullFlagLength);
     memcpy(data, nullsIndicator, nullFlagLength);
     positionInData += nullFlagLength;
-    positionInRecord += nullFlagLength + (sizeof(uint32_t) * numberOfFields);
+    //positionInRecord += nullFlagLength + (sizeof(uint32_t) * numberOfFields);
+    positionInRecord += sizeof(uint32_t) + nullFlagLength; // Skip over the first number of fields.
+
+    uint32_t fieldsSize = sizeof(uint32_t);
+    uint32_t fieldOffsetSize = sizeof(uint32_t);
+    uint32_t startOfFields = fieldsSize + nullFlagLength;
+    uint32_t endOfFields = startOfFields + (fieldOffsetSize * numberOfFields);
 
     cout << "READING\n";
+
+    // Correct.
+    uint32_t previousFieldOffset = endOfFields; // Initialize previous to end of field offsets.
+    cout << "previousFieldOffset: " << previousFieldOffset << "\n";
+
+    positionInRecord = startOfFields;
+    cout << "positionInRecord: " << positionInRecord << "\n";
 
     int index = 0;
     for (Attribute descriptor : recordDescriptor)
@@ -388,6 +403,34 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
 
         if (!nullBit)
         {
+            uint32_t currentFieldOffset;
+            memcpy(&currentFieldOffset, record + positionInRecord, sizeof(uint32_t));
+
+            uint32_t valueLength = currentFieldOffset - previousFieldOffset;
+            memcpy((char *)data + positionInData, record + previousFieldOffset, valueLength);
+            cout << "\tsize: " << valueLength << "\n";
+
+            if (descriptor.type == TypeVarChar) {
+                char *tmp = (char *)calloc(valueLength + 1, sizeof(char));
+                memcpy(tmp, (char *)data + positionInData, valueLength);
+                cout << "\tvalue: " << tmp << "\n";
+                free(tmp);
+            } else if (descriptor.type == TypeInt) {
+                int tmp;
+                memcpy(&tmp, (char *)data + positionInData, valueLength);
+                cout << "\tvalue: " << tmp << "\n";
+            } else {
+                float tmp;
+                memcpy(&tmp, (char *)data + positionInData, valueLength);
+                cout << "\tvalue: " << tmp << "\n";
+            }
+
+            positionInData += valueLength;
+            positionInRecord += sizeof(uint32_t); // Go to next field.
+
+            previousFieldOffset = currentFieldOffset;
+
+            /*
             switch (descriptor.type)
             {
             case TypeInt:
@@ -397,7 +440,6 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
                 uint32_t tmp;
                 memcpy(&tmp, record + positionInRecord, sizeof(uint32_t));
                 cout << "\tvalue: " << tmp << "\n";
-
                 memcpy((char *)data + positionInData, record + positionInRecord, sizeof(uint32_t));
                 positionInRecord += sizeof(uint32_t);
                 positionInData += sizeof(uint32_t);
@@ -435,6 +477,7 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
             }
             break;
             }
+            */
         }
     }
     free(page);
