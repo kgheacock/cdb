@@ -294,8 +294,8 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
     *freeSpaceOffsetValue += recordSize;
     *slotCount += 1;
 
-    //free(page);
-    //free(const_cast<void *>(record));
+    free(page);
+    free(const_cast<void *>(record));
     return 0;
 }
 
