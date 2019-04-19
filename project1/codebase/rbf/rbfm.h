@@ -1,5 +1,6 @@
 #ifndef _rbfm_h_
 #define _rbfm_h_
+#define PAGE_END_INDEX 1023
 
 #include <string>
 #include <vector>

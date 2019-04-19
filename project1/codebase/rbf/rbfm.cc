@@ -189,32 +189,37 @@ int findOffset(int slotNum, const void *page, int *length = nullptr)
     memcpy(&offset, (char *)page + slotOffset, sizeof(uint32_t));
     return offset;
 }
-/* todo 
 
-long long RecrodBasedFileManager::getFreeSpace (const String fileName, Filehandle &fileHandle, PageNum page) {
-    long long pageOffset,freeSpaceStart, freeSpaceEnd;
-    char* freeSpaceOffset, numSlots;
+int getFreeSpace (const char *page) 
+{
+    int freeSpaceStart = page[PAGE_END_INDEX];
+
+    // Check if the slot count is 0
+    if (page[PAGE_END_INDEX - 1] == 0) 
+    {
+        int slotCountPos = PAGE_SIZE - 2 * sizeof(uint32_t);
+        return slotCountPos - freeSpaceStart;
+    }
     
-    pageOffset = (page + 1) * sizeOfPage - 4;
-    fs->seekg(pageOffset);               // seek to page free space offset 
-    fs->read(freeSpaceOffset, 4);        // get free space offset
-    fs->seekg(freeSpaceOffset, fs.cur);  // seek to beginnig of free space from current position 
-    freeSpaceStart = fs->tellg;          // get absolute position
-
-    fs->seekg(pageOffset -4);            
-    fs->read(numSlots, 4);               
-    fs->seekg(-numberOfSlots * 2, fs.cur); // seek to end of free space
-    freeSpaceEnd = fs->tellg;              // get absolute position                
-    return freeSpaceEnd - freeSpaceStart;  // return size of free space
+    int lastSlot = page[PAGE_END_INDEX - 1] - 1; // adjust slot number        
+    int freeSpaceEnd = findOffset(lastSlot, page, nullptr);
+    
+    return freeSpaceEnd - freeSpaceStart;
 }
 
-unsigned long RecordBasedFileManager::getRecordSize (const vector<Attribute> &recordDescriptor, const void *data) {
+/* 
+to do:
+
+bool recordFits(const char *page, int recordSize)
+{
+    return recordSize + SlotSize() <= getFreeSpace(page);
+}
+
+
+int RecordBasedFileManager::getRecordSize (const vector<Attribute> &recordDescriptor, const void *data) {
 
 }
 
-bool RecordBasedFileManager::recordFits(PageNum page, int recordSize) {
-    return recordSize + getSlotSize() <= getFreeSpace(page);
-}
 
 PageNum RecordBasedFileManager::findPageForRecord (FileHandle &fileHandle, const void *record) {
     n = fileHandle.getNumPages();
@@ -399,7 +404,7 @@ RC RecordBasedFileManager::printRecord(const vector<Attribute> &recordDescriptor
         {
             int number = 0;
             memcpy(&number, (char *)data + position, sizeof(int));
-            std::cout << number << " ";
+            cout << number << " ";
             position += sizeof(int);
             break;
         }
@@ -407,7 +412,7 @@ RC RecordBasedFileManager::printRecord(const vector<Attribute> &recordDescriptor
         {
             float number = 0;
             memcpy(&number, (char *)data + position, sizeof(float));
-            std::cout << number << " ";
+            cout << number << " ";
             position += sizeof(float);
             break;
         }
@@ -418,13 +423,13 @@ RC RecordBasedFileManager::printRecord(const vector<Attribute> &recordDescriptor
             char varChar[varCharSize + 1];
             memcpy(&varChar, (char *)data + position + sizeof(int), varCharSize);
             varChar[varCharSize] = '\0';
-            std::cout << varChar << " ";
+            cout << varChar << " ";
             position += sizeof(int) + varCharSize;
             break;
         }
         }
     }
-    std::cout << std::endl;
+    cout << endl;
     free(nullsIndicator);
     return 0;
 }
