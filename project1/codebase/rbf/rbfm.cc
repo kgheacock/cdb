@@ -150,11 +150,11 @@ const void *getWritableRecord(const vector<Attribute> &recordDescriptor, const v
             cout << "\tvalue: " << tmp << "\n";
             free(tmp);
         } else if (descriptor.type == TypeInt) {
-            float tmp;
+            int tmp;
             memcpy(&tmp, (char *)data + positionInData, fieldSize);
             cout << "\tvalue: " << tmp << "\n";
         } else {
-            int tmp;
+            float tmp;
             memcpy(&tmp, (char *)data + positionInData, fieldSize);
             cout << "\tvalue: " << tmp << "\n";
         }
