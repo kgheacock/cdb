@@ -1,20 +1,24 @@
 1. Basic information
-Team number:
+Team number: 8 
 Student ID of submitter: 
-Student Name of submitter: 
-Other Team Members:
+Student Name of submitter: Allston Mickey
+Other Team Members: Michael Farrill, Keith Heacock
 
 
 2. Internal Record Format
-- Show your record format design and describe how your design satisfies O(1) field access. If not, just mention that you haven't implemented this feature.
-- Describe how you store a VarChar field.
 
+We used a variable-length record format with a directory and additionally, with null flags. The directory is an array of field offsets. This allows direct access to each element (an offset) in the array in constant time O(1).
+
+- Describe how you store a VarChar field.
+ 
 
 3. Page Format
-- Show your page format design
+
+Our Page format consists of variable length records (identified by record ids), packed free space, a slot directory, the number of slots, and the free space offset. Rids contain a page id, indicating on what page the record is located, and a slot #, indicating in which index its offset is located in the slot directory. Free space is contiguous, making it easier to manage.  The slot directory can be increased in size, taking from the free space and incrementing the number of slots. The free space offset indicates the beginning of free space, which is neccessary for record insertion and other essential functions.  
 
 
 4. Implementation Detail
+
 - Other implementation details goes here.
 
 
