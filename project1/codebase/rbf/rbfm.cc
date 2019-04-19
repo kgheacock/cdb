@@ -100,6 +100,8 @@ const void *getWritableRecord(const vector<Attribute> &recordDescriptor, const v
 
     int recordPreviousValueEnd = recordValuesStart;
 
+    cout << "WRITING\n";
+
     int index = 0;
     for (Attribute descriptor : recordDescriptor)
     {
@@ -111,6 +113,10 @@ const void *getWritableRecord(const vector<Attribute> &recordDescriptor, const v
         {
             continue;
         }
+
+        cout << "name: " << descriptor.name << "\n";
+        cout << "\ttype: " << descriptor.type << "\n";
+        cout << "\tlength: " << descriptor.length << "\n";
 
         int fieldSize = 0;
         switch (descriptor.type)
@@ -137,6 +143,22 @@ const void *getWritableRecord(const vector<Attribute> &recordDescriptor, const v
         // Copy field value from data to record.
         const uint32_t recordCurrentValueStart = recordPreviousValueEnd;
         memcpy(record + recordCurrentValueStart, (char *)data + positionInData, fieldSize);
+        
+        if (descriptor.type == TypeVarChar) {
+            char *tmp = (char *)calloc(fieldSize + 1, sizeof(char));
+            memcpy(tmp, (char *)data + positionInData, fieldSize);
+            cout << "\tvalue: " << tmp << "\n";
+            free(tmp);
+        } else if (descriptor.type == TypeInt) {
+            float tmp;
+            memcpy(&tmp, (char *)data + positionInData, fieldSize);
+            cout << "\tvalue: " << tmp << "\n";
+        } else {
+            int tmp;
+            memcpy(&tmp, (char *)data + positionInData, fieldSize);
+            cout << "\tvalue: " << tmp << "\n";
+        }
+
         positionInData += fieldSize;
 
         // "Point" field offset at end of value.
@@ -328,10 +350,13 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
     unsigned char *nullsIndicator = (unsigned char *)malloc(nullFlagLength);
 
     //Retrieve the null flags, write them to data and advance the position
-    memcpy(nullsIndicator, (char *)page + recordOffset, nullFlagLength);
+    const char *record = (char *)page + recordOffset + sizeof(uint32_t); // Skip over the first number of fields.
+    memcpy(nullsIndicator, record, nullFlagLength);
     memcpy(data, nullsIndicator, nullFlagLength);
     positionInData += nullFlagLength;
-    positionInRecord += nullFlagLength;
+    positionInRecord += nullFlagLength + (sizeof(uint32_t) * numberOfFields);
+
+    cout << "READING\n";
 
     int index = 0;
     for (Attribute descriptor : recordDescriptor)
@@ -346,51 +371,55 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
         //Create a Mask with a "1" in the correct position and AND it with the value of nullsIndicator
         bool nullBit = nullsIndicator[(index - 1) / CHAR_BIT] & (1 << nullBitPosition);
 
+        cout << "name: " << descriptor.name << "\n";
+        cout << "\ttype: " << descriptor.type << "\n";
+        cout << "\tlength: " << descriptor.length << "\n";
+
         if (!nullBit)
         {
             switch (descriptor.type)
             {
             case TypeInt:
             {
-                //Declare an empty double pointer and copy the value of the record pointer into it.
-                //(note:) Dereference recordPointerPointer once to get the value of the pointer and twice to get
-                //the value of the data at that position
-                int **recordPointerPointer = nullptr;
-                memcpy(recordPointerPointer, (char *)page + recordOffset + positionInRecord, sizeof(uint32_t));
+                cout << "\tsize: 4 bytes\n";
 
-                //copy the memory at *recordPointer to data
-                memcpy((char *)data + positionInRecord, *recordPointerPointer, sizeof(uint32_t));
+                uint32_t tmp;
+                memcpy(&tmp, record + positionInRecord, sizeof(uint32_t));
+                cout << "\tvalue: " << tmp << "\n";
+
+                memcpy((char *)data + positionInData, record + positionInRecord, sizeof(uint32_t));
                 positionInRecord += sizeof(uint32_t);
                 positionInData += sizeof(uint32_t);
             }
             break;
             case TypeReal:
             {
-                //Declare an empty double pointer and copy the value of the record pointer into it.
-                //(note:) Dereference recordPointerPointer once to get the value of the pointer and twice to get
-                //the value of the data at that position
-                float **recordPointerPointer = nullptr;
-                memcpy(recordPointerPointer, (char *)page + recordOffset + positionInRecord, sizeof(uint32_t));
+                cout << "\tsize: 4 bytes\n";
 
-                //copy the memory at *recordPointer to data
-                memcpy((char *)data + positionInRecord, *recordPointerPointer, sizeof(uint32_t));
+                uint32_t tmp;
+                memcpy(&tmp, record + positionInRecord, sizeof(uint32_t));
+                cout << "\tvalue: " << tmp << "\n";
+
+                memcpy((char *)data + positionInData, record + positionInRecord, sizeof(uint32_t));
                 positionInRecord += sizeof(uint32_t);
                 positionInData += sizeof(uint32_t);
             }
             break;
             case TypeVarChar:
             {
-                //Declare an empty double pointer and copy the value of the record into it
-                //(note:) Dereference recordPointerPointer once to get the value of the pointer and twice to get
-                //the value of the data at that position
-                void **varCharRecordPointerPointer = nullptr;
-                memcpy(varCharRecordPointerPointer, (char *)page + recordOffset + positionInRecord, sizeof(uint32_t));
-                //Find the length of the varchar field by copying the first 4 bytes of the record
-                int *sizeOfVarCharPointer = nullptr;
-                memcpy(sizeOfVarCharPointer, *varCharRecordPointerPointer, sizeof(uint32_t));
+                const uint32_t varCharSize = descriptor.length;
+                cout << "\tvarCharSize: " << varCharSize << "\n";
+                memcpy((char *)data + positionInData, &varCharSize, sizeof(uint32_t));
+                positionInData += sizeof(uint32_t);
 
-                //Copy the varChar field of length *sizeOfVarCharPointer*sizeof(char)+sizeof(uint32_t) <-for the length of the size indicator
-                memcpy((char *)data + positionInRecord, *varCharRecordPointerPointer, (*sizeOfVarCharPointer) * sizeof(char) + sizeof(uint32_t));
+                char *tmp = (char *)calloc(varCharSize + 1, sizeof(char));
+                memcpy(tmp, record + positionInRecord, varCharSize);
+                cout << "\tvalue: " << tmp << "\n";
+                free(tmp);
+
+                memcpy((char *)data + positionInData, record + positionInRecord, varCharSize);
+                positionInRecord += varCharSize;
+                positionInData += varCharSize;
             }
             break;
             }
