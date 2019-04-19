@@ -289,7 +289,6 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
     const uint32_t slotCountPosition = freeSpaceOffsetPosition - 1;
     uint32_t *slotCount = (uint32_t *)page + slotCountPosition;
 
-
     uint8_t *recordInsertPosition = (uint8_t *)page + *freeSpaceOffsetValue;
     memcpy(recordInsertPosition, record, recordSize);
 
@@ -299,7 +298,9 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
     *freeSpaceOffsetValue += recordSize;
     *slotCount += 1;
 
-    fileHandle.writePage(pageNum, page);
+    if (fileHandle.writePage(pageNum, page) != 0) {
+        return -1;
+    }
     
     free(page);
     free(const_cast<void *>(record));
