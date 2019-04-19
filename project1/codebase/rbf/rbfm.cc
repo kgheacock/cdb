@@ -303,22 +303,31 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
     size_t recordSize = 0;
     PageNum pageNum = 0;
     const void *record = getWritableRecord(recordDescriptor, data, recordSize);
+    cout << "recordSize: " << recordSize << "\n";
     void *page = getPageToInsertRecord(fileHandle, recordSize, pageNum);
     
     const uint32_t freeSpaceOffsetPosition = PAGE_END_INDEX;
     uint32_t *freeSpaceOffsetValue = (uint32_t *)page + freeSpaceOffsetPosition;
+    cout << "freeSpaceOffsetPos: " << freeSpaceOffsetPosition << "\n";
+    cout << "freeSpaceOFfsetValue: " << *freeSpaceOffsetValue << "\n";
 
     const uint32_t slotCountPosition = freeSpaceOffsetPosition - 1;
     uint32_t *slotCount = (uint32_t *)page + slotCountPosition;
+    cout << "slotCountPos: " << slotCountPosition << "\n";
+    cout << "slotCount: " << *slotCount << "\n";
 
     uint8_t *recordInsertPosition = (uint8_t *)page + *freeSpaceOffsetValue;
     memcpy(recordInsertPosition, record, recordSize);
 
     rid.pageNum = pageNum;
     rid.slotNum = *slotCount;
+    cout << "pageNum: " << rid.pageNum << "\n";
+    cout << "slotNum: " << rid.slotNum << "\n";
 
     *freeSpaceOffsetValue += recordSize;
     *slotCount += 1;
+    cout << "(after) freeSpaceOFfsetValue: " << *freeSpaceOffsetValue << "\n";
+    cout << "(after) slotCount: " << *slotCount << "\n";
 
     if (fileHandle.writePage(pageNum, page) != 0) {
         return -1;
@@ -333,7 +342,9 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 //EXAMPLE RECORD LAYOUT: [byteArray:nullFlags, int*:pointerToIntegerField, float*:pointerToRealField, void*:pointerToVarCharField, int:integerField, float:realField, int:lengthOfVarCharField, charArray:varCharField]
 RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, void *data)
 {
-
+    cout << "readRecord():\n";
+    cout << "rid.pageNum: " << rid.pageNum << "\n";
+    cout << "rid.slotNum: " << rid.slotNum << "\n";
     //read page into memory
     void *page = malloc(PAGE_SIZE);
     fileHandle.readPage(rid.pageNum, page);
@@ -396,7 +407,7 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
             {
                 cout << "\tsize: 4 bytes\n";
 
-                uint32_t tmp;
+                float tmp;
                 memcpy(&tmp, record + positionInRecord, sizeof(uint32_t));
                 cout << "\tvalue: " << tmp << "\n";
 
@@ -407,7 +418,8 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
             break;
             case TypeVarChar:
             {
-                const uint32_t varCharSize = descriptor.length;
+                //const uint32_t varCharSize = descriptor.length;
+                const uint32_t varCharSize = 8; // [DEBUG] REMOVE THIS, TESTING ONLY
                 cout << "\tvarCharSize: " << varCharSize << "\n";
                 memcpy((char *)data + positionInData, &varCharSize, sizeof(uint32_t));
                 positionInData += sizeof(uint32_t);
