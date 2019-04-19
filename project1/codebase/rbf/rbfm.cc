@@ -66,7 +66,7 @@ const uint32_t getValuesLengthForRecord(const vector<Attribute> &recordDescripto
     return nbytes; 
 }
 
-const void *getWritableRecord(const vector<Attribute> &recordDescriptor, const void *data) {
+const void *getWritableRecord(const vector<Attribute> &recordDescriptor, const void *data, size_t &recordSize) {
     uint32_t nullsFlagLength = 0;
     unsigned char *nullsIndicator = getNullFlags(recordDescriptor, data, nullsFlagLength);
 
@@ -78,7 +78,7 @@ const void *getWritableRecord(const vector<Attribute> &recordDescriptor, const v
     uint32_t valuesLength = getValuesLengthForRecord(recordDescriptor, valuesData, nullsIndicator);
 
     const int recordValuesStart = sizeof(fieldCount) + nullsFlagLength + fieldOffsetTotalLength;
-    const int recordSize = recordValuesStart + valuesLength;
+    recordSize = recordValuesStart + valuesLength;
     unsigned char *record = (unsigned char *)malloc(recordSize);
 
 
@@ -149,6 +149,10 @@ const void *getWritableRecord(const vector<Attribute> &recordDescriptor, const v
 
     free(nullsIndicator);
     return (void *)record;
+}
+
+void *findPageForRecord(FileHandle &fileHandle, const void *record) {
+    return 0;
 }
 
 RecordBasedFileManager *RecordBasedFileManager::_rbf_manager = 0;
@@ -239,6 +243,7 @@ PageNum RecordBasedFileManager::findPageForRecord (FileHandle &fileHandle, const
 
 */
 
+
 RC RecordBasedFileManager::createFile(const string &fileName)
 {
     return pfm->createFile(fileName);
@@ -261,8 +266,16 @@ RC RecordBasedFileManager::closeFile(FileHandle &fileHandle)
 
 RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const void *data, RID &rid)
 {
-    const void *record = getWritableRecord(recordDescriptor, data);
+    size_t recordLength = 0;
+    const void *record = getWritableRecord(recordDescriptor, data, recordLength);
+    void *page = findPageForRecord(fileHandle, record);
+    
 
+    const uint32_t freeSpaceOffsetPosition = PAGE_END_INDEX;
+    uint32_t *freeSpaceOffsetValue = (uint32_t *)page + freeSpaceOffsetPosition;
+
+    const uint32_t slotCountPosition = freeSpaceOffsetPosition - 1;
+    uint32_t *slotCount = (uint32_t *)page + slotCountPosition;
     free(const_cast<void *>(record));
     return -1;
 }
