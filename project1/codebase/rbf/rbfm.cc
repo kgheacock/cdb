@@ -219,10 +219,19 @@ bool recordFits(const size_t recordSize, const void *page)
 }
 
 void *getPageToInsertRecord(FileHandle &fileHandle, const int recordSize, PageNum &pageNum) {
-    auto npages = fileHandle.getNumberOfPages();
     void *pageData = malloc(PAGE_SIZE); // Must be deleted later.
+    const char *initBytes = ""; // Data used to initialize the new page with.  We want it blank.
+
+    auto npages = fileHandle.getNumberOfPages();
+    if (npages == 0) {
+        fileHandle.appendPage((const void *)initBytes);
+        fileHandle.readPage(0, pageData);
+        pageNum = 0;
+        return pageData;
+    }
 
     PageNum lastPage = npages - 1;
+
     fileHandle.readPage(lastPage, pageData);
     if (recordFits(recordSize, pageData))
     {
@@ -240,47 +249,12 @@ void *getPageToInsertRecord(FileHandle &fileHandle, const int recordSize, PageNu
         }
     }
 
-    const char *initBytes = ""; // Data used to initialize the new page with.  We want it blank.
     fileHandle.appendPage((const void *)initBytes);
-    auto appendedPage = lastPage + 1;
+    auto appendedPage = npages;
     fileHandle.readPage(appendedPage, pageData);
-
     pageNum = appendedPage;
     return pageData;
 }
-
-/* 
-to do:
-
-bool recordFits(const char *page, int recordSize)
-{
-    return recordSize + SlotSize() <= getFreeSpace(page);
-}
-
-
-int RecordBasedFileManager::getRecordSize (const vector<Attribute> &recordDescriptor, const void *data) {
-
-}
-
-
-PageNum RecordBasedFileManager::findPageForRecord (FileHandle &fileHandle, const void *record) {
-    n = fileHandle.getNumPages();
-    PageNum page = n - 1;
-    recordSize = getRecordSize();
-    if (recordFits(page, recordSize) {
-        return page;
-    }
-    for (page_i = 0; page_i < n - 1; page_i++){
-        if (recordFits(page_i, record) {
-            return page_i;
-        }
-    }
-    pfm->appendPage();
-    return n;
-}
-
-*/
-
 
 RC RecordBasedFileManager::createFile(const string &fileName)
 {
@@ -314,6 +288,7 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 
     const uint32_t slotCountPosition = freeSpaceOffsetPosition - 1;
     uint32_t *slotCount = (uint32_t *)page + slotCountPosition;
+
     free(const_cast<void *>(record));
     return -1;
 }
