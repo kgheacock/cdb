@@ -179,7 +179,7 @@ RecordBasedFileManager::~RecordBasedFileManager()
 /* SLOT: [uint32_t length, uint32_t offset] 
    0-indexed
 */
-int findOffset(int slotNum, const void *page, int *length = nullptr)
+int findOffset(uint32_t slotNum, const void *page, int *length = nullptr)
 {
     int offset;
     size_t freeSpacePointerLength = sizeof(uint32_t);
@@ -194,21 +194,59 @@ int findOffset(int slotNum, const void *page, int *length = nullptr)
     return offset;
 }
 
-int getFreeSpace (const char *page) 
+// Assume units of words (4 bytes) unless otherwise stated.
+size_t getFreeSpace(const void *page) 
 {
-    int freeSpaceStart = page[PAGE_END_INDEX];
+    const uint32_t freeSpaceOffsetPosition = PAGE_END_INDEX;
+    const uint32_t *freeSpaceStartBytes = (const uint32_t *) page + freeSpaceOffsetPosition;
 
-    // Check if the slot count is 0
-    if (page[PAGE_END_INDEX - 1] == 0) 
+    // Check if the slot count is 0.
+    const uint32_t slotCountPosition = freeSpaceOffsetPosition - 1;
+    const uint32_t *slotCount = (const uint32_t *) page + slotCountPosition;
+    if (*slotCount == 0) 
     {
-        int slotCountPos = PAGE_SIZE - 2 * sizeof(uint32_t);
-        return slotCountPos - freeSpaceStart;
+        int slotCountPositionBytes = slotCountPosition * sizeof(uint32_t); // Convert word position to bytes.
+        return slotCountPositionBytes - *freeSpaceStartBytes;
     }
     
-    int lastSlot = page[PAGE_END_INDEX - 1] - 1; // adjust slot number        
-    int freeSpaceEnd = findOffset(lastSlot, page, nullptr);
-    
-    return freeSpaceEnd - freeSpaceStart;
+    int freeSpaceEnd = findOffset(*slotCount - 1, page);
+    return freeSpaceEnd - *freeSpaceStartBytes;
+}
+
+bool recordFits(const size_t recordSize, const void *page)
+{
+    return recordSize + SlotSize <= getFreeSpace(page);
+}
+
+void *getPageToInsertRecord(FileHandle &fileHandle, const int recordSize, PageNum &pageNum) {
+    auto npages = fileHandle.getNumberOfPages();
+    void *pageData = malloc(PAGE_SIZE); // Must be deleted later.
+
+    PageNum lastPage = npages - 1;
+    fileHandle.readPage(lastPage, pageData);
+    if (recordFits(recordSize, pageData))
+    {
+        pageNum = lastPage;
+        return pageData;
+    }
+
+    for (PageNum i = 0; i < lastPage; i++)
+    {
+        fileHandle.readPage(i, pageData);
+        if (recordFits(recordSize, pageData))
+        {
+            pageNum = i;
+            return pageData;
+        }
+    }
+
+    const char *initBytes = ""; // Data used to initialize the new page with.  We want it blank.
+    fileHandle.appendPage((const void *)initBytes);
+    auto appendedPage = lastPage + 1;
+    fileHandle.readPage(appendedPage, pageData);
+
+    pageNum = appendedPage;
+    return pageData;
 }
 
 /* 
@@ -266,11 +304,11 @@ RC RecordBasedFileManager::closeFile(FileHandle &fileHandle)
 
 RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const void *data, RID &rid)
 {
-    size_t recordLength = 0;
-    const void *record = getWritableRecord(recordDescriptor, data, recordLength);
-    void *page = findPageForRecord(fileHandle, record);
+    size_t recordSize = 0;
+    PageNum pageNum = 0;
+    const void *record = getWritableRecord(recordDescriptor, data, recordSize);
+    void *page = getPageToInsertRecord(fileHandle, recordSize, pageNum);
     
-
     const uint32_t freeSpaceOffsetPosition = PAGE_END_INDEX;
     uint32_t *freeSpaceOffsetValue = (uint32_t *)page + freeSpaceOffsetPosition;
 
