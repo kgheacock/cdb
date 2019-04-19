@@ -129,8 +129,7 @@ unsigned char *getNullFlags(const vector<Attribute> &recordDescriptor, const voi
 }
 
 /* Reads from raw valuesData and returns the necessary space for storing them in a writable record.
- *
- * Note: valuesData must point directly to the first value.
+ *   - valuesData must point directly to the first value.
  */
 const uint32_t getValuesLengthForRecord(const vector<Attribute> &recordDescriptor, const void *valuesData, const unsigned char *nullsIndicator) {
     uint32_t position = 0;
@@ -140,16 +139,8 @@ const uint32_t getValuesLengthForRecord(const vector<Attribute> &recordDescripto
     {
         ++index;
 
-        //Where in the 8 bits is the flag? The Most Significant Bit is bit 7 and Least 0
-        //SEE SLACK CHAT FOR EXPLAINATION: https://cmps181group.slack.com/archives/CHR7PLWT1/p1555617848047000
-        //NOTE: -a MOD b =
         int nullBitPosition = mod(-index, CHAR_BIT);
-
-        //1 array element for every CHAR_BIT fields so [0] = 0:7 [1] = 8:15 etc.
-        //Create a Mask with a "1" in the correct position and AND it with the value of nullsIndicator
         bool nullBit = nullsIndicator[(index - 1) / CHAR_BIT] & (1 << nullBitPosition);
-
-        //If the null indicator is 1 then skip this iteration
         if (nullBit)
         {
             continue;
@@ -192,7 +183,8 @@ const unsigned char *getWritableRecord(const vector<Attribute> &recordDescriptor
     const uint32_t fieldOffsetSize = sizeof(uint32_t);
     const uint32_t fieldOffsetTotalLength = fieldCount * fieldOffsetSize;
 
-    uint32_t valuesLength = getValuesLengthForRecord(recordDescriptor, (char *)data + nullsFlagLength, nullsIndicator);
+    char *valuesData = (char *)data + nullsFlagLength;
+    uint32_t valuesLength = getValuesLengthForRecord(recordDescriptor, valuesData, nullsIndicator);
 
     const int recordValuesStart = sizeof(fieldCount) + nullsFlagLength + fieldOffsetTotalLength;
     const int recordSize = recordValuesStart + valuesLength;
