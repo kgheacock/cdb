@@ -1,19 +1,18 @@
 #include "rbfm.h"
 
-RecordBasedFileManager *RecordBasedFileManager::_rbf_manager = 0;
-
 const size_t SlotSize = 2 * sizeof(uint32_t);
 
-PagedFileManager *RecordBasedFileManager::pfm;
-
 //https://stackoverflow.com/questions/12276675/modulus-with-negative-numbers-in-c
-
 int mod(int a, int b)
 {
     return ((a % b) + b) % b;
 }
-RecordBasedFileManager *RecordBasedFileManager::instance()
 
+RecordBasedFileManager *RecordBasedFileManager::_rbf_manager = 0;
+
+PagedFileManager *RecordBasedFileManager::pfm;
+
+RecordBasedFileManager *RecordBasedFileManager::instance()
 {
     if (!_rbf_manager)
         _rbf_manager = new RecordBasedFileManager();
@@ -116,6 +115,159 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 {
     return -1;
 }
+
+unsigned char *getNullFlags(const vector<Attribute> &recordDescriptor, const void *data, uint32_t &length) {
+    uint32_t numberOfFields = recordDescriptor.size();
+
+    //Calculate the number of null flag bits and allocate enough memory
+    length = ceil((double)numberOfFields / CHAR_BIT);
+    unsigned char *nullsIndicator = (unsigned char *)malloc(length);
+
+    //Retrieve the null flags and advance the position
+    memcpy(nullsIndicator, (char *)data, length);
+    return nullsIndicator;
+}
+
+/* Reads from raw valuesData and returns the necessary space for storing them in a writable record.
+ *
+ * Note: valuesData must point directly to the first value.
+ */
+const uint32_t getValuesLengthForRecord(const vector<Attribute> &recordDescriptor, const void *valuesData, const unsigned char *nullsIndicator) {
+    uint32_t position = 0;
+    uint32_t nbytes = 0;
+    int index = 0;
+    for (Attribute descriptor : recordDescriptor)
+    {
+        ++index;
+
+        //Where in the 8 bits is the flag? The Most Significant Bit is bit 7 and Least 0
+        //SEE SLACK CHAT FOR EXPLAINATION: https://cmps181group.slack.com/archives/CHR7PLWT1/p1555617848047000
+        //NOTE: -a MOD b =
+        int nullBitPosition = mod(-index, CHAR_BIT);
+
+        //1 array element for every CHAR_BIT fields so [0] = 0:7 [1] = 8:15 etc.
+        //Create a Mask with a "1" in the correct position and AND it with the value of nullsIndicator
+        bool nullBit = nullsIndicator[(index - 1) / CHAR_BIT] & (1 << nullBitPosition);
+
+        //If the null indicator is 1 then skip this iteration
+        if (nullBit)
+        {
+            continue;
+        }
+
+        switch (descriptor.type)
+        {
+        case TypeInt:
+        {
+            position += sizeof(uint32_t);
+            nbytes += sizeof(uint32_t);
+            break;
+        }
+        case TypeReal:
+        {
+            position += sizeof(float);
+            nbytes += sizeof(float);
+            break;
+        }
+        case TypeVarChar:
+        {
+            uint32_t varCharSize = 0;
+            memcpy(&varCharSize, (char *)valuesData + position, sizeof(varCharSize)); // Get the length.
+            position += sizeof(varCharSize) + varCharSize; // Skip over the length value itself and the VarChar.
+            nbytes += varCharSize; // We don't need to store the length for our WR format.
+            break;
+        }
+        }
+    }
+
+    return nbytes; 
+}
+
+
+const unsigned char *getWritableRecord(const vector<Attribute> &recordDescriptor, const void *data) {
+    uint32_t nullsFlagLength = 0;
+    unsigned char *nullsIndicator = getNullFlags(recordDescriptor, data, nullsFlagLength);
+
+    const uint32_t fieldCount = recordDescriptor.size();
+    const uint32_t fieldOffsetSize = sizeof(uint32_t);
+    const uint32_t fieldOffsetTotalLength = fieldCount * fieldOffsetSize;
+
+    uint32_t valuesLength = getValuesLengthForRecord(recordDescriptor, (char *)data + nullsFlagLength, nullsIndicator);
+
+    const int recordValuesStart = sizeof(fieldCount) + nullsFlagLength + fieldOffsetTotalLength;
+    const int recordSize = recordValuesStart + valuesLength;
+    unsigned char *record = (unsigned char *)malloc(recordSize);
+
+
+    int positionInRecord = 0;
+
+    // Set field length.
+    memcpy(record + positionInRecord, &fieldCount, sizeof(fieldCount));
+    positionInRecord += sizeof(fieldCount);
+
+    // Set null bytes.
+    memcpy(record + positionInRecord, nullsIndicator, nullsFlagLength);
+    positionInRecord += nullsFlagLength;
+
+    // Iterate through our fields, copying the data's values
+    // while simultaneously setting resulting field offsets.
+
+    const uint32_t dataValuesStart = nullsFlagLength; // Values follow null flags.
+    int positionInData = dataValuesStart;
+
+    int recordPreviousValueEnd = recordValuesStart;
+
+    int index = 0;
+    for (Attribute descriptor : recordDescriptor)
+    {
+        ++index;
+
+        int nullBitPosition = mod(-index, CHAR_BIT);
+        bool nullBit = nullsIndicator[(index - 1) / CHAR_BIT] & (1 << nullBitPosition);
+        if (nullBit)
+        {
+            continue;
+        }
+
+        int fieldSize = 0;
+        switch (descriptor.type)
+        {
+            case TypeInt:
+            {
+                fieldSize = sizeof(uint32_t);
+                break;
+            }
+            case TypeReal:
+            {
+                fieldSize = sizeof(float);
+                break;
+            }
+            case TypeVarChar:
+            {
+                // Get length of VarChar.
+                memcpy(&fieldSize, (char *)data + positionInData, sizeof(uint32_t));
+                positionInData += sizeof(uint32_t); // Setup "pointer" to the VarChar itself.
+                break;
+            }
+        }
+
+        // Copy field value from data to record.
+        const uint32_t recordCurrentValueStart = recordPreviousValueEnd;
+        memcpy(record + recordCurrentValueStart, (char *)data + positionInData, fieldSize);
+        positionInData += fieldSize;
+
+        // "Point" field offset at end of value.
+        const uint32_t recordCurrentValueEnd = recordCurrentValueStart + fieldSize;
+        memcpy(record + positionInRecord, &recordCurrentValueEnd, fieldOffsetSize);
+        positionInRecord += fieldOffsetSize;
+
+        recordPreviousValueEnd = recordCurrentValueEnd;
+    }
+
+    free(nullsIndicator);
+    return record;
+}
+
 //EXAMPLE RECORD LAYOUT: [byteArray:nullFlags, int*:pointerToIntegerField, float*:pointerToRealField, void*:pointerToVarCharField, int:integerField, float:realField, int:lengthOfVarCharField, charArray:varCharField]
 RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, void *data)
 {
@@ -146,10 +298,14 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
     {
         ++index;
         //Where in the 8 bits is the flag? The Most Significant Bit is bit 7 and Least 0
-        int nullBitPosition = (CHAR_BIT) - (index % CHAR_BIT);
+        //SEE SLACK CHAT FOR EXPLAINATION: https://cmps181group.slack.com/archives/CHR7PLWT1/p1555617848047000
+        //NOTE: -a MOD b =
+        int nullBitPosition = mod(-index, CHAR_BIT);
+
         //1 array element for every CHAR_BIT fields so [0] = 0:7 [1] = 8:15 etc.
         //Create a Mask with a "1" in the correct position and AND it with the value of nullsIndicator
-        bool nullBit = nullsIndicator[(index + 1) / CHAR_BIT] & (1 << nullBitPosition);
+        bool nullBit = nullsIndicator[(index - 1) / CHAR_BIT] & (1 << nullBitPosition);
+
         if (!nullBit)
         {
             switch (descriptor.type)
@@ -230,10 +386,12 @@ RC RecordBasedFileManager::printRecord(const vector<Attribute> &recordDescriptor
         //Where in the 8 bits is the flag? The Most Significant Bit is bit 7 and Least 0
         //SEE SLACK CHAT FOR EXPLAINATION: https://cmps181group.slack.com/archives/CHR7PLWT1/p1555617848047000
         //NOTE: -a MOD b =
-        int nullBitPosition = mod(-1 * index, CHAR_BIT);
+        int nullBitPosition = mod(-index, CHAR_BIT);
+
         //1 array element for every CHAR_BIT fields so [0] = 0:7 [1] = 8:15 etc.
         //Create a Mask with a "1" in the correct position and AND it with the value of nullsIndicator
-        bool nullBit = nullsIndicator[(index + 1) / CHAR_BIT] & (1 << nullBitPosition);
+        bool nullBit = nullsIndicator[(index - 1) / CHAR_BIT] & (1 << nullBitPosition);
+
         //If the null indicator is 1 then skip this iteration
         if (nullBit)
         {
