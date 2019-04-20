@@ -456,9 +456,58 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
     if (fileHandle.readPage(rid.pageNum, pageData))
         return RBFM_READ_FAILED;
     
-    SlotDirectoryRecordEntry sdre = getSlotDirectoryRecordEntry(pageData, rid.slotNum);
-    // TODO
-    return 0;
+    SlotDirectoryRecordEntry recordEntry = getSlotDirectoryRecordEntry(pageData, rid.slotNum);
+    if (recordEntry.offset < 0)
+        return RBFM_SLOT_DN_EXIST;
+
+    if (isSlotForwarding(recordEntry))
+    {
+        markSlotAsTerminal(recordEntry); // We don't want the fwd bit to impact our new slot number.
+        RID new_rid;
+        new_rid.pageNum = recordEntry.offset;
+        new_rid.slotNum = recordEntry.length;
+        return deleteRecord(fileHandle, recordDescriptor, new_rid); // Jump to our forwarded location and delete there.
+    }
+    
+    SlotDirectoryHeader directoryHeader = getSlotDirectoryHeader(pageData);
+
+    const bool adjacent_to_free_space = recordEntry.offset + recordEntry.length == directoryHeader.freeSpaceOffset;
+    if (!adjacent_to_free_space)
+    {
+        // Shift all records after the deleted record into the new hole.
+        const auto hole_start_offset = recordEntry.offset;
+        const auto hole_end_offset = hole_start_offset + recordEntry.length;
+        const auto bytes_until_free_space = directoryHeader.freeSpaceOffset - hole_end_offset;
+
+        memcpy(
+            (char *) pageData + hole_start_offset,
+            (char *) pageData + hole_end_offset,
+            bytes_until_free_space
+        );
+    }
+
+    const auto new_free_space_length = recordEntry.length;
+    const auto new_free_space_offset = directoryHeader.freeSpaceOffset - new_free_space_length;
+    const char *new_free_space = (char *) calloc(new_free_space_length, sizeof(char));
+    if (new_free_space == NULL)
+        return RBFM_MALLOC_FAILED;
+
+    memcpy(
+        (char *) pageData + new_free_space_offset,
+        new_free_space,
+        new_free_space_length
+    );
+
+    directoryHeader.freeSpaceOffset = new_free_space_offset; // Update free space offset.
+    setSlotDirectoryHeader(pageData, directoryHeader);
+
+    recordEntry.offset = -1; // Invalidate record offset.
+    setSlotDirectoryRecordEntry(pageData, rid.slotNum, recordEntry);
+
+    if (fileHandle.writePage(rid.pageNum, pageData))
+        return RBFM_WRITE_FAILED;
+    
+    return SUCCESS;
 }
 
 uint32_t getForwardingMask(const SlotDirectoryRecordEntry recordEntry) {
