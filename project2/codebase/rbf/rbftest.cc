@@ -751,6 +751,33 @@ int RBFTest_10(RecordBasedFileManager *rbfm) {
     return 0;
 }
 
+int RBFTest_11() {
+    cout << endl << "***** In RBF Test Case 11 *****" << endl;
+    SlotDirectoryRecordEntry recordEntry;
+    recordEntry.offset = 0;
+
+    bool rc;
+
+    recordEntry.length = 0;
+    rc = isSlotForwarding(recordEntry);
+    assert(rc == false && "Slots should not forward with a cleared MSB.");
+
+    recordEntry.length = -1;
+    rc = isSlotForwarding(recordEntry);
+    assert(rc == true && "Slots should forward with a set MSB.");
+
+    markSlotAsTerminal(recordEntry);
+    rc = isSlotForwarding(recordEntry);
+    assert(rc == false && "Failed to mark slot as terminal.");
+
+    markSlotAsForwarding(recordEntry);
+    rc = isSlotForwarding(recordEntry);
+    assert(rc == true && "Failed to mark slot as forwarding.");
+
+    cout << "RBF Test Case 11 Finished! Slot forwarding utilities are correct." << endl << endl;
+    return 0;
+}
+
 int main()
 {
     // To test the functionality of the paged file manager
@@ -785,6 +812,8 @@ int main()
     vector<int> sizes;
     RBFTest_9(rbfm, rids, sizes);
     RBFTest_10(rbfm);
+
+    RBFTest_11(); // Forwarding utils.
     
     return 0;
 }

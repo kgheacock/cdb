@@ -447,3 +447,39 @@ void RecordBasedFileManager::setRecordAtOffset(void *page, unsigned offset, cons
         header_offset += sizeof(ColumnOffset);
     }
 }
+
+RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid)
+{
+    void *pageData = malloc(PAGE_SIZE);
+    if (pageData == NULL)
+        return RBFM_MALLOC_FAILED;
+    if (fileHandle.readPage(rid.pageNum, pageData))
+        return RBFM_READ_FAILED;
+    
+    SlotDirectoryRecordEntry sdre = getSlotDirectoryRecordEntry(pageData, rid.slotNum);
+    // TODO
+    return 0;
+}
+
+uint32_t getForwardingMask(const SlotDirectoryRecordEntry recordEntry) {
+    const auto nbits_length = sizeof(recordEntry.length) * CHAR_BIT;
+    const auto last_bit_position = nbits_length - 1;
+    return 1 << last_bit_position;
+}
+
+void markSlotAsForwarding(SlotDirectoryRecordEntry &recordEntry)
+{
+    recordEntry.length |= getForwardingMask(recordEntry);
+}
+
+void markSlotAsTerminal(SlotDirectoryRecordEntry &recordEntry)
+{
+    recordEntry.length &= (~getForwardingMask(recordEntry));
+}
+
+bool isSlotForwarding(const SlotDirectoryRecordEntry recordEntry)
+{
+    const auto fwd = recordEntry.length & getForwardingMask(recordEntry);
+    return fwd != 0;
+}
+

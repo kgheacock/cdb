@@ -184,4 +184,9 @@ private:
   void getRecordAtOffset(void *record, unsigned offset, const vector<Attribute> &recordDescriptor, void *data);
 };
 
+void markSlotAsTerminal(SlotDirectoryRecordEntry &recordEntry); // Slot is no longer forwarding.
+void markSlotAsForwarding(SlotDirectoryRecordEntry &recordEntry);
+bool isSlotForwarding(const SlotDirectoryRecordEntry recordEntry);
+uint32_t getForwardingMask(const SlotDirectoryRecordEntry recordEntry);
+
 #endif
