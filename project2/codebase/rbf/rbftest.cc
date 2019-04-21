@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <stdio.h>
 #include <fstream>
+#include <unordered_map>
 
 #include "pfm.h"
 #include "rbfm.h"
@@ -778,6 +779,121 @@ int RBFTest_11() {
     return 0;
 }
 
+int RBFTest_12(RecordBasedFileManager *rbfm, int recordToDelete) 
+{
+    // Functions tested
+    // 1. Create Record-Based File
+    // 2. Open Record-Based File
+    // 3. Insert Record
+    // 4. Delete Record ***
+    // 4. Read Record
+    // 5. Close Record-Based File
+    // 6. Destroy Record-Based File
+    cout << endl << "***** In RBF Test Case 12 (deleting record " << recordToDelete << ") *****" << endl;
+   
+    RC rc;
+    string fileName = "test12";
+
+    // Create the file.
+    remove("test12");
+    rc = rbfm->createFile(fileName);
+    assert(rc == success && "Creating the file should not fail.");
+
+    rc = createFileShouldSucceed(fileName);
+    assert(rc == success && "Creating the file failed.");
+
+    // Open the file.
+    FileHandle fileHandle;
+    rc = rbfm->openFile(fileName, fileHandle);
+    assert(rc == success && "Opening the file should not fail.");
+
+    vector<Attribute> recordDescriptor;
+    createLargeRecordDescriptor(recordDescriptor);
+
+    // NULL field indicator
+    int nullFieldsIndicatorActualSize = getActualByteForNullsIndicator(recordDescriptor.size());
+    unsigned char *nullsIndicator = (unsigned char *) malloc(nullFieldsIndicatorActualSize);
+    memset(nullsIndicator, 0, nullFieldsIndicatorActualSize);
+
+    RID rid; 
+    unordered_map<RID, void *, RIDHasher> ridsToRecord;
+    unordered_map<RID, int, RIDHasher> ridsToSize;
+
+    RID deletedRID;
+
+    int numRecords = 3;
+    for(int i = 0; i < numRecords; i++)
+    {
+        int size = 0;
+        void *record = calloc(1000, sizeof(uint8_t));
+        prepareLargeRecord(recordDescriptor.size(), nullsIndicator, i, record, &size);
+
+        rc = rbfm->insertRecord(fileHandle, recordDescriptor, record, rid);
+        assert(rc == success && "Inserting a record should not fail.");
+
+        ridsToRecord[rid] = record;
+        ridsToSize[rid] = size;
+
+        if (i == recordToDelete)
+            deletedRID = rid;
+    }
+
+    rc = rbfm->deleteRecord(fileHandle, recordDescriptor, deletedRID);
+    if (rc == RBFM_SLOT_DN_EXIST && recordToDelete >= numRecords)
+        return 0;
+    assert(rc == success && "Deleting a record should not fail.");
+
+    // Go through all of our records and try to find them in the file.
+    // For each match, remove it from our map.
+    // At the end, we should have a single record in our map (the one we deleted on the page!).
+    for (auto it = ridsToRecord.cbegin(); it != ridsToRecord.cend();)
+    {
+        rid = it->first;
+        void *record = it->second;
+
+        if (rid == deletedRID) {
+            it++;
+            continue;
+        }
+
+        rc = rbfm->readRecord(fileHandle, recordDescriptor, rid, record);
+        assert(rc == SUCCESS && "Failed to read an inserted record.");
+
+        bool recordsMatch;
+        recordsMatch = memcmp(record, ridsToRecord[rid], ridsToSize[rid]) == 0;
+        assert(recordsMatch && "Some record was modified after deletion.");
+
+        free(ridsToRecord[rid]);
+        it = ridsToRecord.erase(it);
+        ridsToSize.erase(rid);
+    }
+
+    // We built up our map on inserting and then tore it down on reading records.
+    // There should only be one record left.
+    assert(!ridsToRecord.empty() && "No records were deleted."); // We tore down EVERY record.
+    assert(ridsToRecord.size() == 1 && "More than one record was deleted."); // We didn't tear down enough.
+
+    RID remainingRID = ridsToRecord.begin()->first;
+    assert(remainingRID == deletedRID && "Unexpected RID was deleted");
+
+    // Close the file.
+    rc = rbfm->closeFile(fileHandle);
+    assert(rc == success && "Closing the file should not fail.");
+    remove(fileName.c_str());
+
+    free(ridsToRecord[remainingRID]);
+    cout << "RBF Test Case 12 Finished (deleting record " << recordToDelete << ")" << endl << endl;
+    return 0;
+}
+
+int RBFTest_12(RecordBasedFileManager *rbfm) {
+    RBFTest_12(rbfm, 0); // Adjacent to page boundary.
+    RBFTest_12(rbfm, 1); // In between two records.
+    RBFTest_12(rbfm, 2); // Adjacent to free space.
+    RBFTest_12(rbfm, 3); // Record doesn't exist.
+    return 0;
+}
+
 int main()
 {
     // To test the functionality of the paged file manager
@@ -797,6 +913,7 @@ int main()
     remove("test9");
     remove("test9rids");
     remove("test9sizes");
+    remove("test12");
 
     RBFTest_1(pfm);
     RBFTest_2(pfm);
@@ -814,6 +931,7 @@ int main()
     RBFTest_10(rbfm);
 
     RBFTest_11(); // Forwarding utils.
-    
+
+    RBFTest_12(rbfm); 
     return 0;
 }

@@ -5,6 +5,7 @@
 #include <vector>
 #include <climits>
 #include <inttypes.h>
+#include <functional>
 #include "../rbf/pfm.h"
 
 #define INT_SIZE                4
@@ -28,6 +29,12 @@ typedef struct
   unsigned slotNum; // slot number in the page
 } RID;
 
+bool operator==(const RID &x, const RID &y);
+
+struct RIDHasher
+{
+  size_t operator()(const RID rid) const;
+};
 
 // Attribute
 typedef enum { TypeInt = 0, TypeReal, TypeVarChar } AttrType;

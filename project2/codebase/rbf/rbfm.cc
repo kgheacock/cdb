@@ -5,6 +5,16 @@
 #include <string.h>
 #include <iomanip>
 
+bool operator==(const RID &x, const RID &y)
+{
+    return x.pageNum == y.pageNum && x.slotNum == y.slotNum;
+}
+
+size_t RIDHasher::operator()(const RID rid) const
+{
+    return hash<unsigned>{}(rid.pageNum ^ rid.slotNum);
+}
+
 RecordBasedFileManager* RecordBasedFileManager::_rbf_manager = NULL;
 PagedFileManager *RecordBasedFileManager::_pf_manager = NULL;
 
@@ -142,6 +152,8 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
     SlotDirectoryRecordEntry recordEntry = getSlotDirectoryRecordEntry(pageData, rid.slotNum);
 
     // Retrieve the actual entry data
+    if (recordEntry.offset < 0)
+        return RBFM_SLOT_DN_EXIST;
     getRecordAtOffset(pageData, recordEntry.offset, recordDescriptor, data);
 
     free(pageData);
@@ -455,7 +467,11 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
         return RBFM_MALLOC_FAILED;
     if (fileHandle.readPage(rid.pageNum, pageData))
         return RBFM_READ_FAILED;
-    
+
+    SlotDirectoryHeader directoryHeader = getSlotDirectoryHeader(pageData);
+    if (rid.slotNum >= directoryHeader.recordEntriesNumber)
+        return RBFM_SLOT_DN_EXIST;
+
     SlotDirectoryRecordEntry recordEntry = getSlotDirectoryRecordEntry(pageData, rid.slotNum);
     if (recordEntry.offset < 0)
         return RBFM_SLOT_DN_EXIST;
@@ -469,44 +485,51 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
         return deleteRecord(fileHandle, recordDescriptor, new_rid); // Jump to our forwarded location and delete there.
     }
     
-    SlotDirectoryHeader directoryHeader = getSlotDirectoryHeader(pageData);
+    const auto gainedFreeSpace = recordEntry.length;
 
-    const bool adjacent_to_free_space = recordEntry.offset + recordEntry.length == directoryHeader.freeSpaceOffset;
+    const bool adjacent_to_free_space = recordEntry.offset == directoryHeader.freeSpaceOffset;
     if (!adjacent_to_free_space)
     {
         // Shift all records after the deleted record into the new hole.
-        const auto hole_start_offset = recordEntry.offset;
-        const auto hole_end_offset = hole_start_offset + recordEntry.length;
-        const auto bytes_until_free_space = directoryHeader.freeSpaceOffset - hole_end_offset;
-
-        memcpy(
-            (char *) pageData + hole_start_offset,
-            (char *) pageData + hole_end_offset,
-            bytes_until_free_space
+        memmove(
+            (char *) pageData + directoryHeader.freeSpaceOffset + gainedFreeSpace,
+            (char *) pageData + directoryHeader.freeSpaceOffset,
+            recordEntry.offset - directoryHeader.freeSpaceOffset
         );
     }
 
-    const auto new_free_space_length = recordEntry.length;
-    const auto new_free_space_offset = directoryHeader.freeSpaceOffset - new_free_space_length;
-    const char *new_free_space = (char *) calloc(new_free_space_length, sizeof(char));
-    if (new_free_space == NULL)
-        return RBFM_MALLOC_FAILED;
+    for (int i = 0; i < directoryHeader.recordEntriesNumber; i++)
+    {
+        SlotDirectoryRecordEntry entry_i = getSlotDirectoryRecordEntry(pageData, i);
 
-    memcpy(
-        (char *) pageData + new_free_space_offset,
-        new_free_space,
-        new_free_space_length
-    );
+        bool entryIsInPage = entry_i.offset >= 0 && !isSlotForwarding(entry_i);
+        bool entryIsBeforeDeletion = entry_i.offset < recordEntry.offset;
+        bool mustShiftOffset = entryIsInPage && entryIsBeforeDeletion;
+        if (!mustShiftOffset)
+            continue;
 
-    directoryHeader.freeSpaceOffset = new_free_space_offset; // Update free space offset.
+        entry_i.offset += recordEntry.length;
+        setSlotDirectoryRecordEntry(pageData, i, entry_i);
+    }
+
+    // Clear any old data to reclaim our free space.
+    //const auto new_free_space_length = recordEntry.length;
+    //const auto new_free_space_offset = directoryHeader.freeSpaceOffset - new_free_space_length;
+    //memset((char *) pageData + new_free_space_offset, 0, new_free_space_length);
+    memset((char *) pageData + directoryHeader.freeSpaceOffset, 0, gainedFreeSpace);
+
+    //directoryHeader.freeSpaceOffset = new_free_space_offset; // Update free space offset.
+    directoryHeader.freeSpaceOffset += gainedFreeSpace; // Update free space offset.
     setSlotDirectoryHeader(pageData, directoryHeader);
 
     recordEntry.offset = -1; // Invalidate record offset.
     setSlotDirectoryRecordEntry(pageData, rid.slotNum, recordEntry);
 
+
     if (fileHandle.writePage(rid.pageNum, pageData))
         return RBFM_WRITE_FAILED;
-    
+
+    fileHandle.readPage(rid.pageNum, pageData);
     return SUCCESS;
 }
 
