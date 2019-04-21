@@ -530,6 +530,7 @@ int RBFTest_8(RecordBasedFileManager *rbfm)
 
     cout << "RBF Test Case 8 Finished! The result will be examined." << endl << endl;
     
+    free(nullsIndicator);
     return 0;
 }
 
@@ -629,6 +630,7 @@ int RBFTest_9(RecordBasedFileManager *rbfm, vector<RID> &rids, vector<int> &size
         
     cout << "RBF Test Case 9 Finished! The result will be examined." << endl << endl;
 
+    free(nullsIndicator);
     return 0;
 }
 
@@ -749,6 +751,7 @@ int RBFTest_10(RecordBasedFileManager *rbfm) {
     remove("test9sizes");
     remove("test9rids");
     
+    free(nullsIndicator);
     return 0;
 }
 
@@ -819,7 +822,7 @@ int RBFTest_12(RecordBasedFileManager *rbfm, int recordToDelete)
     unordered_map<RID, void *, RIDHasher> ridsToRecord;
     unordered_map<RID, int, RIDHasher> ridsToSize;
 
-    RID deletedRID;
+    RID *deletedRID = nullptr;
 
     int numRecords = 3;
     for(int i = 0; i < numRecords; i++)
@@ -834,11 +837,15 @@ int RBFTest_12(RecordBasedFileManager *rbfm, int recordToDelete)
         ridsToRecord[rid] = record;
         ridsToSize[rid] = size;
 
-        if (i == recordToDelete)
-            deletedRID = rid;
+        if (i == recordToDelete) {
+            deletedRID = (RID *) malloc(sizeof(RID));
+            *deletedRID = rid;
+        }
     }
 
-    rc = rbfm->deleteRecord(fileHandle, recordDescriptor, deletedRID);
+    assert(deletedRID != nullptr);
+
+    rc = rbfm->deleteRecord(fileHandle, recordDescriptor, *deletedRID);
     if (rc == RBFM_SLOT_DN_EXIST && recordToDelete >= numRecords)
         return 0;
     assert(rc == success && "Deleting a record should not fail.");
@@ -851,7 +858,7 @@ int RBFTest_12(RecordBasedFileManager *rbfm, int recordToDelete)
         rid = it->first;
         void *record = it->second;
 
-        if (rid == deletedRID) {
+        if (rid == *deletedRID) {
             it++;
             continue;
         }
@@ -874,14 +881,16 @@ int RBFTest_12(RecordBasedFileManager *rbfm, int recordToDelete)
     assert(ridsToRecord.size() == 1 && "More than one record was deleted."); // We didn't tear down enough.
 
     RID remainingRID = ridsToRecord.begin()->first;
-    assert(remainingRID == deletedRID && "Unexpected RID was deleted");
+    assert(remainingRID == *deletedRID && "Unexpected RID was deleted");
 
     // Close the file.
     rc = rbfm->closeFile(fileHandle);
     assert(rc == success && "Closing the file should not fail.");
     remove(fileName.c_str());
 
+    free(deletedRID);
     free(ridsToRecord[remainingRID]);
+    free(nullsIndicator);
     cout << "RBF Test Case 12 Finished (deleting record " << recordToDelete << ")" << endl << endl;
     return 0;
 }
@@ -890,7 +899,6 @@ int RBFTest_12(RecordBasedFileManager *rbfm) {
     RBFTest_12(rbfm, 0); // Adjacent to page boundary.
     RBFTest_12(rbfm, 1); // In between two records.
     RBFTest_12(rbfm, 2); // Adjacent to free space.
-    RBFTest_12(rbfm, 3); // Record doesn't exist.
     return 0;
 }
 

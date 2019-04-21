@@ -462,10 +462,12 @@ void RecordBasedFileManager::setRecordAtOffset(void *page, unsigned offset, cons
 
 RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid)
 {
-    void *pageData = malloc(PAGE_SIZE);
+    void *pageData = calloc(PAGE_SIZE, sizeof(char));
     if (pageData == NULL)
         return RBFM_MALLOC_FAILED;
-    if (fileHandle.readPage(rid.pageNum, pageData))
+
+    auto rc = fileHandle.readPage(rid.pageNum, pageData);
+    if (rc != SUCCESS)
         return RBFM_READ_FAILED;
 
     SlotDirectoryHeader directoryHeader = getSlotDirectoryHeader(pageData);
@@ -529,7 +531,7 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
     if (fileHandle.writePage(rid.pageNum, pageData))
         return RBFM_WRITE_FAILED;
 
-    fileHandle.readPage(rid.pageNum, pageData);
+    free(pageData);
     return SUCCESS;
 }
 
