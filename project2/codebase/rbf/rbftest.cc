@@ -855,7 +855,7 @@ int RBFTest_12(RecordBasedFileManager *rbfm, int recordToDelete)
     for (auto it = ridsToRecord.cbegin(); it != ridsToRecord.cend();)
     {
         rid = it->first;
-        void *record = it->second;
+        void *record = calloc(1000, sizeof(char));
 
         if (rid == *deletedRID) {
             it++;
@@ -863,6 +863,14 @@ int RBFTest_12(RecordBasedFileManager *rbfm, int recordToDelete)
         }
 
         rc = rbfm->readRecord(fileHandle, recordDescriptor, rid, record);
+
+        if (rid == *deletedRID)
+        {
+            assert(rc == RBFM_SLOT_DN_EXIST && "Failed to error on reading from empty slot of deleted record.");
+            it++;
+            continue;
+        }
+
         assert(rc == SUCCESS && "Failed to read an inserted record.");
 
         bool recordsMatch;
@@ -985,20 +993,27 @@ int RBFTest_13(RecordBasedFileManager *rbfm, int recordToDelete)
     // Go through all of our records and try to find them in the file.
     // For each match, remove it from our map.
     // At the end, we should have two records in our map (the one we deleted on the page, and the new record).
-    for (auto it = ridsToRecord.cbegin(); it != ridsToRecord.cend();)
+    for (auto it = ridsToRecord.cbegin(); it != ridsToRecord.cend(); it = ridsToRecord.erase(it))
     {
         rid = it->first;
-        void *record = it->second;
+        void *record = calloc(1000, sizeof(char));
 
         rc = rbfm->readRecord(fileHandle, recordDescriptor, rid, record);
         assert(rc == SUCCESS && "Failed to read an inserted record.");
 
         bool recordsMatch;
         recordsMatch = memcmp(record, ridsToRecord[rid], ridsToSize[rid]) == 0;
-        assert(recordsMatch && "Some record was modified after deletion.");
+        if (rid == newRID)
+        {
+            assert(!recordsMatch && "Some record was modified after deletion.");
+        }
+        else
+        {
+            assert(recordsMatch && "Some record was modified after deletion.");
+        }
 
+        free(record);
         free(ridsToRecord[rid]);
-        it = ridsToRecord.erase(it);
         ridsToSize.erase(rid);
     }
 
