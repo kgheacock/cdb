@@ -189,6 +189,8 @@ private:
 
   void setRecordAtOffset(void *page, unsigned offset, const vector<Attribute> &recordDescriptor, const void *data);
   void getRecordAtOffset(void *record, unsigned offset, const vector<Attribute> &recordDescriptor, void *data);
+
+  int32_t findEmptySlot(void *pageData);
 };
 
 void markSlotAsTerminal(SlotDirectoryRecordEntry &recordEntry); // Slot is no longer forwarding.

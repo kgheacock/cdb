@@ -819,10 +819,9 @@ int RBFTest_12(RecordBasedFileManager *rbfm, int recordToDelete)
     memset(nullsIndicator, 0, nullFieldsIndicatorActualSize);
 
     RID rid; 
+    RID *deletedRID = nullptr;
     unordered_map<RID, void *, RIDHasher> ridsToRecord;
     unordered_map<RID, int, RIDHasher> ridsToSize;
-
-    RID *deletedRID = nullptr;
 
     int numRecords = 3;
     for(int i = 0; i < numRecords; i++)
@@ -895,10 +894,136 @@ int RBFTest_12(RecordBasedFileManager *rbfm, int recordToDelete)
     return 0;
 }
 
-int RBFTest_12(RecordBasedFileManager *rbfm) {
+int RBFTest_12(RecordBasedFileManager *rbfm)
+{
     RBFTest_12(rbfm, 0); // Adjacent to page boundary.
     RBFTest_12(rbfm, 1); // In between two records.
     RBFTest_12(rbfm, 2); // Adjacent to free space.
+    return 0;
+}
+
+// Insert records, delete a record, then insert another record.
+// The last record that was inserted should fill the slot from the deleted record.
+int RBFTest_13(RecordBasedFileManager *rbfm, int recordToDelete)
+{
+    // Functions tested
+    // 1. Create Record-Based File
+    // 2. Open Record-Based File
+    // 3. Insert Record ***
+    // 4. Delete Record ***
+    // 4. Read Record
+    // 5. Close Record-Based File
+    // 6. Destroy Record-Based File
+    cout << endl << "***** In RBF Test Case 13 (deleting record " << recordToDelete << ") *****" << endl;
+   
+    RC rc;
+    string fileName = "test13";
+
+    // Create the file.
+    rc = rbfm->createFile(fileName);
+    assert(rc == success && "Creating the file should not fail.");
+
+    rc = createFileShouldSucceed(fileName);
+    assert(rc == success && "Creating the file failed.");
+
+    // Open the file.
+    FileHandle fileHandle;
+    rc = rbfm->openFile(fileName, fileHandle);
+    assert(rc == success && "Opening the file should not fail.");
+
+    vector<Attribute> recordDescriptor;
+    createLargeRecordDescriptor(recordDescriptor);
+
+    // NULL field indicator
+    int nullFieldsIndicatorActualSize = getActualByteForNullsIndicator(recordDescriptor.size());
+    unsigned char *nullsIndicator = (unsigned char *) malloc(nullFieldsIndicatorActualSize);
+    memset(nullsIndicator, 0, nullFieldsIndicatorActualSize);
+
+    RID rid; 
+    RID *deletedRID = nullptr;
+    unordered_map<RID, void *, RIDHasher> ridsToRecord;
+    unordered_map<RID, int, RIDHasher> ridsToSize;
+
+    int numRecords = 3;
+    int i;
+    for(i = 0; i < numRecords; i++)
+    {
+        int size = 0;
+        void *record = calloc(1000, sizeof(uint8_t));
+        prepareLargeRecord(recordDescriptor.size(), nullsIndicator, i, record, &size);
+
+        rc = rbfm->insertRecord(fileHandle, recordDescriptor, record, rid);
+        assert(rc == success && "Inserting a record should not fail.");
+
+        ridsToRecord[rid] = record;
+        ridsToSize[rid] = size;
+
+        if (i == recordToDelete)
+        {
+            deletedRID = (RID *) malloc(sizeof(RID));
+            *deletedRID = rid;
+        }
+    }
+
+    assert(deletedRID != nullptr);
+
+    rc = rbfm->deleteRecord(fileHandle, recordDescriptor, *deletedRID);
+    if (rc == RBFM_SLOT_DN_EXIST && recordToDelete >= numRecords)
+        return 0;
+    assert(rc == success && "Deleting a record should not fail.");
+
+    // Insert a new record;
+    int newSize = 0;
+    void *newRecord = calloc(1000, sizeof(uint8_t));
+    prepareLargeRecord(recordDescriptor.size(), nullsIndicator, i, newRecord, &newSize);
+
+    RID newRID;
+    rc = rbfm->insertRecord(fileHandle, recordDescriptor, newRecord, newRID);
+    assert(rc == success && "Inserting a record should not fail.");
+    assert(newRID == *deletedRID && "New record should have same RID as the one that was deleted.");
+
+    // Go through all of our records and try to find them in the file.
+    // For each match, remove it from our map.
+    // At the end, we should have two records in our map (the one we deleted on the page, and the new record).
+    for (auto it = ridsToRecord.cbegin(); it != ridsToRecord.cend();)
+    {
+        rid = it->first;
+        void *record = it->second;
+
+        rc = rbfm->readRecord(fileHandle, recordDescriptor, rid, record);
+        assert(rc == SUCCESS && "Failed to read an inserted record.");
+
+        bool recordsMatch;
+        recordsMatch = memcmp(record, ridsToRecord[rid], ridsToSize[rid]) == 0;
+        assert(recordsMatch && "Some record was modified after deletion.");
+
+        free(ridsToRecord[rid]);
+        it = ridsToRecord.erase(it);
+        ridsToSize.erase(rid);
+    }
+
+    // We built up our map on inserting and then tore it down on reading records.
+    // There should be no records left because our new record had the same RID as the deleted record.
+    assert(ridsToRecord.empty() && "No records were deleted.");
+
+    // Close the file.
+    rc = rbfm->closeFile(fileHandle);
+    assert(rc == success && "Closing the file should not fail.");
+    remove(fileName.c_str());
+
+    free(newRecord);
+    free(deletedRID);
+    free(nullsIndicator);
+    cout << "RBF Test Case 13 Finished (deleting record " << recordToDelete << ")" << endl << endl;
+    return 0;
+    
+}
+
+int RBFTest_13(RecordBasedFileManager *rbfm)
+{
+    RBFTest_13(rbfm, 0); // Adjacent to page boundary.
+    RBFTest_13(rbfm, 1); // In between two records.
+    RBFTest_13(rbfm, 2); // Adjacent to free space.
     return 0;
 }
 
@@ -922,6 +1047,7 @@ int main()
     remove("test9rids");
     remove("test9sizes");
     remove("test12");
+    remove("test13");
 
     RBFTest_1(pfm);
     RBFTest_2(pfm);
@@ -941,5 +1067,6 @@ int main()
     RBFTest_11(); // Forwarding utils.
 
     RBFTest_12(rbfm); 
+    RBFTest_13(rbfm);
     return 0;
 }

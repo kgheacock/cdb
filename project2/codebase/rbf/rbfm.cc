@@ -78,33 +78,51 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
     void *pageData = malloc(PAGE_SIZE);
     if (pageData == NULL)
         return RBFM_MALLOC_FAILED;
-    bool pageFound = false;
+
+    int32_t slotCandidate = -1;
+    bool foundEmptySlot = false;
+    bool spaceFound = false;
     unsigned i;
     unsigned numPages = fileHandle.getNumberOfPages();
+
+    // When we find a page with enough space (accounting also for the size that will be added to the slot directory), we stop the loop.
     for (i = 0; i < numPages; i++)
     {
         if (fileHandle.readPage(i, pageData))
             return RBFM_READ_FAILED;
 
-        // When we find a page with enough space (accounting also for the size that will be added to the slot directory), we stop the loop.
-        if (getPageFreeSpaceSize(pageData) >= sizeof(SlotDirectoryRecordEntry) + recordSize)
+        const auto freeSpaceSize = getPageFreeSpaceSize(pageData);
+        const bool mayFillEmptySlot = freeSpaceSize >= sizeof(SlotDirectoryRecordEntry);
+        const bool canAllocateWithNewSlot = freeSpaceSize >= sizeof(SlotDirectoryRecordEntry) + recordSize;
+
+        // Check for allocated but unused slot.
+        if (mayFillEmptySlot && (slotCandidate = findEmptySlot(pageData)) >= 0)
         {
-            pageFound = true;
+            foundEmptySlot = true;
+            spaceFound = true;
+            break;
+        }
+        else if (canAllocateWithNewSlot)
+        {
+            spaceFound = true;
             break;
         }
     }
 
-    // If we can't find a page with enough space, we create a new one
-    if(!pageFound)
+    SlotDirectoryHeader slotHeader;
+    if(!spaceFound)
     {
         newRecordBasedPage(pageData);
+        slotHeader = getSlotDirectoryHeader(pageData);
+        rid.slotNum = 0;
+    }
+    else
+    {
+        slotHeader = getSlotDirectoryHeader(pageData);
+        rid.slotNum = foundEmptySlot ? slotCandidate : slotHeader.recordEntriesNumber;
     }
 
-    SlotDirectoryHeader slotHeader = getSlotDirectoryHeader(pageData);
-
-    // Setting up the return RID.
     rid.pageNum = i;
-    rid.slotNum = slotHeader.recordEntriesNumber;
 
     // Adding the new record reference in the slot directory.
     SlotDirectoryRecordEntry newRecordEntry;
@@ -121,7 +139,7 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
     setRecordAtOffset (pageData, newRecordEntry.offset, recordDescriptor, data);
 
     // Writing the page to disk.
-    if (pageFound)
+    if (spaceFound)
     {
         if (fileHandle.writePage(i, pageData))
             return RBFM_WRITE_FAILED;
@@ -533,6 +551,21 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
 
     free(pageData);
     return SUCCESS;
+}
+
+int32_t RecordBasedFileManager::findEmptySlot(void *pageData)
+{
+    SlotDirectoryHeader slotHeader = getSlotDirectoryHeader(pageData);
+    for (uint16_t i = 0; i < slotHeader.recordEntriesNumber; i++)
+    {
+        SlotDirectoryRecordEntry entry = getSlotDirectoryRecordEntry(pageData, i);
+        bool slotIsEmpty = entry.offset < 0;
+        if (slotIsEmpty)
+        {
+            return i;
+        }
+    }
+    return -1;
 }
 
 uint32_t getForwardingMask(const SlotDirectoryRecordEntry recordEntry) {
