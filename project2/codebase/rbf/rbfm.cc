@@ -502,7 +502,13 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
         RID new_rid;
         new_rid.pageNum = recordEntry.offset;
         new_rid.slotNum = recordEntry.length;
-        return deleteRecord(fileHandle, recordDescriptor, new_rid); // Jump to our forwarded location and delete there.
+        rc = deleteRecord(fileHandle, recordDescriptor, new_rid); // Jump to our forwarded location and delete there.
+        if (rc != SUCCESS)
+            return rc;
+
+        recordEntry.offset = -1; // Clean up forwarding by marking the slot as empty.
+        setSlotDirectoryRecordEntry(pageData, rid.slotNum, recordEntry);
+        return SUCCESS;
     }
     
     const auto gainedFreeSpace = recordEntry.length;
