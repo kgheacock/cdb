@@ -197,5 +197,6 @@ void markSlotAsTerminal(SlotDirectoryRecordEntry &recordEntry); // Slot is no lo
 void markSlotAsForwarding(SlotDirectoryRecordEntry &recordEntry);
 bool isSlotForwarding(const SlotDirectoryRecordEntry recordEntry);
 uint32_t getForwardingMask(const SlotDirectoryRecordEntry recordEntry);
+RID getRID(const SlotDirectoryRecordEntry recordEntry);
 
 #endif

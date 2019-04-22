@@ -172,6 +172,15 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
     // Retrieve the actual entry data
     if (recordEntry.offset < 0)
         return RBFM_SLOT_DN_EXIST;
+
+    // TODO: test reading record from forwarded slot.
+    if (isSlotForwarding(recordEntry))
+    {
+        markSlotAsTerminal(recordEntry); // We don't want the fwd bit to impact our new slot number.
+        RID new_rid = getRID(recordEntry);
+        return readRecord(fileHandle, recordDescriptor, new_rid, data);
+    }
+
     getRecordAtOffset(pageData, recordEntry.offset, recordDescriptor, data);
 
     free(pageData);
@@ -499,9 +508,7 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
     if (isSlotForwarding(recordEntry))
     {
         markSlotAsTerminal(recordEntry); // We don't want the fwd bit to impact our new slot number.
-        RID new_rid;
-        new_rid.pageNum = recordEntry.offset;
-        new_rid.slotNum = recordEntry.length;
+        RID new_rid = getRID(recordEntry);
         rc = deleteRecord(fileHandle, recordDescriptor, new_rid); // Jump to our forwarded location and delete there.
         if (rc != SUCCESS)
             return rc;
@@ -594,5 +601,14 @@ bool isSlotForwarding(const SlotDirectoryRecordEntry recordEntry)
 {
     const auto fwd = recordEntry.length & getForwardingMask(recordEntry);
     return fwd != 0;
+}
+
+// Assumes that the recordEntry is an RID (i.e. the slot is forwarding).
+RID getRID(const SlotDirectoryRecordEntry recordEntry)
+{
+        RID new_rid;
+        new_rid.pageNum = recordEntry.offset;
+        new_rid.slotNum = recordEntry.length;
+        return new_rid;
 }
 
