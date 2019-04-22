@@ -69,6 +69,7 @@ protected:
 
 private:
   static RelationManager *_rm;
+  static RecordBasedFileManager *_rbfm;
 };
 
 #endif
