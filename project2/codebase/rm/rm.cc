@@ -2,7 +2,7 @@
 #include "rm.h"
 
 RelationManager* RelationManager::_rm = 0;
-
+RecordBasedFileManager *RelationManager::_rbfm = 0;
 RelationManager* RelationManager::instance()
 {
     if(!_rm)
