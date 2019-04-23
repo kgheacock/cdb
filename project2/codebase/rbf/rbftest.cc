@@ -1065,6 +1065,13 @@ namespace RBFTest_14
             return -1;
         }
 
+        // Updated record may increase in size but remain on same page (if there's space).
+        int toUnforwarded_incrSize(RecordBasedFileManager *rbfm)
+        {
+            assert(false);
+            return -1;
+        }
+
         // Updated record is now forwarded.
         int toForwarded(RecordBasedFileManager *rbfm)
         {
@@ -1140,6 +1147,7 @@ int main()
 
     RBFTest_14::Unforwarded::toUnforwarded_shrinkSize(rbfm);
     RBFTest_14::Unforwarded::toUnforwarded_constSize(rbfm);
+    RBFTest_14::Unforwarded::toUnforwarded_incrSize(rbfm);
     RBFTest_14::Unforwarded::toForwarded(rbfm);
     RBFTest_14::Forwarded::toSamePage(rbfm);
     RBFTest_14::Forwarded::toDiffPage(rbfm);
