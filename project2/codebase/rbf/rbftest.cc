@@ -1042,6 +1042,60 @@ int RBFTest_13(RecordBasedFileManager *rbfm)
     return 0;
 }
 
+// Updating a record.  Initial RID must be permanent while
+// still retrieving the record, regardless of its location in storage.
+// Note that a record should only be forwarded when it updates and gains length.
+// If a record stays the same length or is shorter, it should stay on the same page.
+namespace RBFTest_14
+{
+    // Record is initially unforwarded.
+    namespace Unforwarded
+    {
+        // Updated record remains on same page (primary page).
+        int toUnforwarded_shrinkSize(RecordBasedFileManager *rbfm)
+        {
+            assert(false);
+            return -1;
+        }
+
+        // Updated record remains on same page (primary page).
+        int toUnforwarded_constSize(RecordBasedFileManager *rbfm)
+        {
+            assert(false);
+            return -1;
+        }
+
+        // Updated record is now forwarded.
+        int toForwarded(RecordBasedFileManager *rbfm)
+        {
+            assert(false);
+            return -1;
+        }
+    }
+
+    // Record is initially forwarded.
+    namespace Forwarded
+    {
+        int toSamePage(RecordBasedFileManager *rbfm)
+        {
+            assert(false);
+            return -1;
+        }
+
+        int toDiffPage(RecordBasedFileManager *rbfm)
+        {
+            assert(false);
+            return -1;
+        }
+
+        int toPrimaryPage(RecordBasedFileManager *rbfm)
+        {
+            assert(false);
+            return -1;
+        }
+    }
+};
+
 int main()
 {
     // To test the functionality of the paged file manager
@@ -1083,5 +1137,13 @@ int main()
 
     RBFTest_12(rbfm); 
     RBFTest_13(rbfm);
+
+    RBFTest_14::Unforwarded::toUnforwarded_shrinkSize(rbfm);
+    RBFTest_14::Unforwarded::toUnforwarded_constSize(rbfm);
+    RBFTest_14::Unforwarded::toForwarded(rbfm);
+    RBFTest_14::Forwarded::toSamePage(rbfm);
+    RBFTest_14::Forwarded::toDiffPage(rbfm);
+    RBFTest_14::Forwarded::toPrimaryPage(rbfm);
+
     return 0;
 }

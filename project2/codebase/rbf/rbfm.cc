@@ -565,6 +565,11 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
     return SUCCESS;
 }
 
+RC updateRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const void *data, const RID &rid)
+{
+    return -1;
+}
+
 int32_t RecordBasedFileManager::findEmptySlot(void *pageData)
 {
     SlotDirectoryHeader slotHeader = getSlotDirectoryHeader(pageData);
@@ -616,6 +621,7 @@ SlotDirectoryRecordEntry getRecordEntry(const RID rid)
     SlotDirectoryRecordEntry recordEntry;
     recordEntry.offset = rid.pageNum;
     recordEntry.length = rid.slotNum;
+    markSlotAsForwarding(recordEntry);
     return recordEntry;
 }
 
