@@ -176,7 +176,6 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
     // TODO: test reading record from forwarded slot.
     if (isSlotForwarding(recordEntry))
     {
-        markSlotAsTerminal(recordEntry); // We don't want the fwd bit to impact our new slot number.
         RID new_rid = getRID(recordEntry);
         return readRecord(fileHandle, recordDescriptor, new_rid, data);
     }
@@ -507,13 +506,13 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
 
     if (isSlotForwarding(recordEntry))
     {
-        markSlotAsTerminal(recordEntry); // We don't want the fwd bit to impact our new slot number.
         RID new_rid = getRID(recordEntry);
         rc = deleteRecord(fileHandle, recordDescriptor, new_rid); // Jump to our forwarded location and delete there.
         if (rc != SUCCESS)
             return rc;
 
         recordEntry.offset = -1; // Clean up forwarding by marking the slot as empty.
+        markSlotAsTerminal(recordEntry);
         setSlotDirectoryRecordEntry(pageData, rid.slotNum, recordEntry);
         return SUCCESS;
     }
@@ -603,8 +602,9 @@ bool isSlotForwarding(const SlotDirectoryRecordEntry recordEntry)
     return fwd != 0;
 }
 
-RID getRID(const SlotDirectoryRecordEntry recordEntry)
+RID getRID(SlotDirectoryRecordEntry recordEntry)
 {
+        markSlotAsTerminal(recordEntry); // We don't want the fwd bit to impact our new slot number.
         RID new_rid;
         new_rid.pageNum = recordEntry.offset;
         new_rid.slotNum = recordEntry.length;
