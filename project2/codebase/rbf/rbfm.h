@@ -197,6 +197,15 @@ void markSlotAsTerminal(SlotDirectoryRecordEntry &recordEntry); // Slot is no lo
 void markSlotAsForwarding(SlotDirectoryRecordEntry &recordEntry);
 bool isSlotForwarding(const SlotDirectoryRecordEntry recordEntry);
 uint32_t getForwardingMask(const SlotDirectoryRecordEntry recordEntry);
+
+/* Conversions between RID <-> SlotDirectoryRecordEntry.
+ *
+ * Only passes values between the objects.
+ *
+ * These do not perform any checks on the semantics,
+ * so results only make sense if the slot is forwarding.
+ */
 RID getRID(const SlotDirectoryRecordEntry recordEntry);
+SlotDirectoryRecordEntry getRecordEntry(const RID rid);
 
 #endif

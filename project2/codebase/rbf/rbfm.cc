@@ -603,12 +603,19 @@ bool isSlotForwarding(const SlotDirectoryRecordEntry recordEntry)
     return fwd != 0;
 }
 
-// Assumes that the recordEntry is an RID (i.e. the slot is forwarding).
 RID getRID(const SlotDirectoryRecordEntry recordEntry)
 {
         RID new_rid;
         new_rid.pageNum = recordEntry.offset;
         new_rid.slotNum = recordEntry.length;
         return new_rid;
+}
+
+SlotDirectoryRecordEntry getRecordEntry(const RID rid)
+{
+    SlotDirectoryRecordEntry recordEntry;
+    recordEntry.offset = rid.pageNum;
+    recordEntry.length = rid.slotNum;
+    return recordEntry;
 }
 
