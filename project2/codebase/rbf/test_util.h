@@ -286,10 +286,8 @@ void createLargeRecordDescriptor2(vector<Attribute> &recordDescriptor) {
  * On return, index will be set such that inserting a prepared large record,
  * called with that index, will be placed on the next page.
  */
-void *createUnforwardedPage(RecordBasedFileManager *rbfm, FileHandle &fileHandle, int &index, vector<Attribute> recordDescriptor, vector<RID> &rids, vector<int> &sizes)
+void *createUnforwardedPage(RecordBasedFileManager *rbfm, FileHandle &fileHandle, int &index, vector<Attribute> &recordDescriptor, vector<RID> &rids, vector<int> &sizes)
 {
-    void *page = calloc(PAGE_SIZE, sizeof(char));
-
     createLargeRecordDescriptor(recordDescriptor);
 
     // NULL field indicator
@@ -299,18 +297,19 @@ void *createUnforwardedPage(RecordBasedFileManager *rbfm, FileHandle &fileHandle
 
     RID rid;
     PageNum initialPageNum;
-
     bool isFirstIteration = true;
+
     // Insert just enough records to fill up one page.
     while (true)
     {
         int size = 0;
+
         void *record = calloc(1000, sizeof(uint8_t));
         prepareLargeRecord(recordDescriptor.size(), nullsIndicator, index++, record, &size);
-
         auto rc = rbfm->insertRecord(fileHandle, recordDescriptor, record, rid);
-        assert(rc == success && "Inserting a record should not fail.");
         free(record);
+
+        assert(rc == success && "Inserting a record should not fail.");
 
         if (isFirstIteration)
         {
@@ -327,8 +326,12 @@ void *createUnforwardedPage(RecordBasedFileManager *rbfm, FileHandle &fileHandle
         sizes.push_back(size);
     }
 
+    void *pageData = malloc(PAGE_SIZE);
+    auto rc = fileHandle.readPage(rids.front().pageNum, pageData);
+    assert(rc == SUCCESS && "Reading page should not fail.");
+
     free(nullsIndicator);
-    return page;
+    return pageData;
 }
 
 // create a page with all forwarded records.

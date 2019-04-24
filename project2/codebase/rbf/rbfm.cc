@@ -5,6 +5,11 @@
 #include <string.h>
 #include <iomanip>
 
+void RID::print()
+{
+    cout << "<pid=" << pageNum << ", sid=" << slotNum << ">";
+}
+
 bool operator==(const RID &x, const RID &y)
 {
     return x.pageNum == y.pageNum && x.slotNum == y.slotNum;
@@ -567,7 +572,36 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
 
 RC RecordBasedFileManager::updateRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const void *data, const RID &rid)
 {
-    return -1;
+    auto rc = deleteRecord(fileHandle, recordDescriptor, rid);
+    if (rc != SUCCESS)
+        return rc;
+
+    RID newRID;
+    rc = insertRecord(fileHandle, recordDescriptor, data, newRID);
+    if (rc != SUCCESS)
+        return rc;
+
+    if (newRID == rid) // No forwarding, we're already in the right location.
+        return SUCCESS;
+
+    // Otherwise, fix the link s.t given RID forwards to new RID.
+    
+    // Get page for given RID (which is the slot we must forward).
+    void *pageData = malloc(PAGE_SIZE);
+    if (pageData == NULL)
+    {
+        return RBFM_MALLOC_FAILED;
+    }
+    rc = fileHandle.readPage(rid.pageNum, pageData);
+    if (rc != SUCCESS)
+        return rc;
+
+    // Overwrite slot with forwarding entry.
+    SlotDirectoryRecordEntry forwardingEntry = getRecordEntry(newRID);
+    setSlotDirectoryRecordEntry(pageData, rid.slotNum, forwardingEntry);
+    rc = fileHandle.writePage(rid.pageNum, pageData);
+    free(pageData);
+    return rc;
 }
 
 int32_t RecordBasedFileManager::findEmptySlot(void *pageData)

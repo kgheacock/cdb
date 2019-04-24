@@ -27,6 +27,7 @@ typedef struct
 {
   unsigned pageNum;	// page number
   unsigned slotNum; // slot number in the page
+  void print();
 } RID;
 
 bool operator==(const RID &x, const RID &y);
