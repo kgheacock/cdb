@@ -858,6 +858,7 @@ int RBFTest_12(RecordBasedFileManager *rbfm, int recordToDelete)
         void *record = calloc(1000, sizeof(char));
 
         if (rid == *deletedRID) {
+            free(record);
             it++;
             continue;
         }
@@ -866,6 +867,7 @@ int RBFTest_12(RecordBasedFileManager *rbfm, int recordToDelete)
 
         if (rid == *deletedRID)
         {
+            free(record);
             assert(rc == RBFM_SLOT_DN_EXIST && "Failed to error on reading from empty slot of deleted record.");
             it++;
             continue;
@@ -877,6 +879,7 @@ int RBFTest_12(RecordBasedFileManager *rbfm, int recordToDelete)
         recordsMatch = memcmp(record, ridsToRecord[rid], ridsToSize[rid]) == 0;
         assert(recordsMatch && "Some record was modified after deletion.");
 
+        free(record);
         free(ridsToRecord[rid]);
         it = ridsToRecord.erase(it);
         ridsToSize.erase(rid);
@@ -1048,14 +1051,107 @@ int RBFTest_13(RecordBasedFileManager *rbfm)
 // If a record stays the same length or is shorter, it should stay on the same page.
 namespace RBFTest_14
 {
+    string fileName = "test14";
+    FileHandle fileHandle;
+
     // Record is initially unforwarded.
     namespace Unforwarded
     {
+        void beforeEach(RecordBasedFileManager *rbfm)
+        {
+            remove(fileName.c_str());
+
+            // Create the file.
+            auto rc = rbfm->createFile(fileName);
+            assert(rc == success && "Creating the file should not fail.");
+
+            rc = createFileShouldSucceed(fileName);
+            assert(rc == success && "Creating the file failed.");
+
+            // Open the file.
+            rc = rbfm->openFile(fileName, fileHandle);
+            assert(rc == success && "Opening the file should not fail.");
+        }
+
+        void afterEach(RecordBasedFileManager *rbfm)
+        {
+            // Close the file.
+            auto rc = rbfm->closeFile(fileHandle);
+            assert(rc == success && "Closing the file should not fail.");
+            remove(fileName.c_str());
+        }
+
         // Updated record remains on same page (primary page).
         int toUnforwarded_shrinkSize(RecordBasedFileManager *rbfm)
         {
-            assert(false);
-            return -1;
+            cout << "****In RBF Test Case 14 (to unforwarded, shrink) ****" << endl;
+            int index = 0;
+            vector<Attribute> recordDescriptor;
+            vector<RID> rids;
+            vector<int> sizes;
+            void *page = createUnforwardedPage(rbfm, fileHandle, index, recordDescriptor, rids, sizes);
+            assert(page != nullptr && "Unforwarded page creation should not fail.");
+
+            /* I'm not sure how prepareLargeRecord calculates the size.
+             * From inserting records, it seems that the size is always increasing,
+             * but it may wrap around at some point.  To be safe, we just get the min and max records.
+             *
+             * Find the largest and smallest records in our unforwarded page:
+             */
+            auto minSize = INT_MAX;
+            auto maxSize = INT_MIN;
+            auto argminSize = -1; // Index of min.
+            auto argmaxSize = -1; // Index of max.
+            for (auto it = sizes.begin(); it != sizes.end(); ++it) {
+                    auto size = *it;
+                    int index = distance(sizes.begin(), it);
+                    if (size <= minSize)
+                    {
+                        minSize = size;
+                        argminSize = index;
+                    }
+                    if (size >= maxSize)
+                    {
+                        maxSize = size;
+                        argmaxSize = index;
+                    }
+            }
+            assert(argminSize != -1);  // We must have found some min.
+            assert(argmaxSize != -1);  // We must have found some max.
+            assert(minSize != maxSize); // And we need a record that is larger than the min (to shrink it).
+            
+            // Load smallest record.
+            void *minRecord = malloc(sizes[argminSize]);
+            auto rc = rbfm->readRecord(fileHandle, recordDescriptor, rids[argminSize], minRecord);
+            assert(rc == SUCCESS);
+
+            // Load largest record.
+            void *maxRecord = malloc(sizes[argmaxSize]);
+            rc = rbfm->readRecord(fileHandle, recordDescriptor, rids[argmaxSize], maxRecord);
+            assert(rc == SUCCESS);
+
+            // Replace the largest record with a copy of the smallest record.
+            rc = rbfm->updateRecord(fileHandle, recordDescriptor, minRecord, rids[argmaxSize]);
+            assert(rc == SUCCESS && "Update record should not fail on shrinking size.");
+
+            // Load updated record.
+            void *updatedRecord = malloc(sizes[argminSize]);
+            rc = rbfm->readRecord(fileHandle, recordDescriptor, rids[argmaxSize], updatedRecord);
+
+            // Updated record SHOULD NOT BE MAX record.
+            bool updated_eq_max = memcmp(updatedRecord, maxRecord, sizes[argminSize]) == 0 ? true : false;
+            assert(updated_eq_max == false && "Updated record should not be the max record.");
+
+            // Updated record SHOULD BE MIN record.
+            bool updated_eq_min = memcmp(updatedRecord, minRecord, sizes[argminSize]) == 0 ? true : false;
+            assert(updated_eq_min == true && "Updated record should be the min record.");
+
+            free(updatedRecord);
+            free(maxRecord);
+            free(minRecord);
+            free(page);
+            cout << "RBF Test Case 14 Finished (to unforwarded, shrink)" << endl << endl;
+            return success;
         }
 
         // Updated record remains on same page (primary page).
@@ -1077,6 +1173,26 @@ namespace RBFTest_14
         {
             assert(false);
             return -1;
+        }
+
+        int runAll(RecordBasedFileManager *rbfm)
+        {
+            vector<int (*)(RecordBasedFileManager *)> fs
+            {
+                toUnforwarded_shrinkSize,
+                toUnforwarded_constSize,
+                toUnforwarded_incrSize,
+                toForwarded
+            };
+
+            for (auto f : fs)
+            {
+                beforeEach(rbfm);
+                auto rc = f(rbfm);
+                assert(rc == success);
+                afterEach(rbfm);
+            }
+            return success;
         }
     }
 
@@ -1124,6 +1240,7 @@ int main()
     remove("test9sizes");
     remove("test12");
     remove("test13");
+    remove("test14");
 
     RBFTest_1(pfm);
     RBFTest_2(pfm);
@@ -1145,10 +1262,7 @@ int main()
     RBFTest_12(rbfm); 
     RBFTest_13(rbfm);
 
-    RBFTest_14::Unforwarded::toUnforwarded_shrinkSize(rbfm);
-    RBFTest_14::Unforwarded::toUnforwarded_constSize(rbfm);
-    RBFTest_14::Unforwarded::toUnforwarded_incrSize(rbfm);
-    RBFTest_14::Unforwarded::toForwarded(rbfm);
+    RBFTest_14::Unforwarded::runAll(rbfm);
     RBFTest_14::Forwarded::toSamePage(rbfm);
     RBFTest_14::Forwarded::toDiffPage(rbfm);
     RBFTest_14::Forwarded::toPrimaryPage(rbfm);

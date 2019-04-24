@@ -279,3 +279,62 @@ void createLargeRecordDescriptor2(vector<Attribute> &recordDescriptor) {
     }
     free(suffix);
 }
+
+/* Create a page with all unforwarded records.
+ * Assumes that we're starting on a fresh page.
+ *
+ * On return, index will be set such that inserting a prepared large record,
+ * called with that index, will be placed on the next page.
+ */
+void *createUnforwardedPage(RecordBasedFileManager *rbfm, FileHandle &fileHandle, int &index, vector<Attribute> recordDescriptor, vector<RID> &rids, vector<int> &sizes)
+{
+    void *page = calloc(PAGE_SIZE, sizeof(char));
+
+    createLargeRecordDescriptor(recordDescriptor);
+
+    // NULL field indicator
+    int nullFieldsIndicatorActualSize = getActualByteForNullsIndicator(recordDescriptor.size());
+    unsigned char *nullsIndicator = (unsigned char *) malloc(nullFieldsIndicatorActualSize);
+    memset(nullsIndicator, 0, nullFieldsIndicatorActualSize);
+
+    RID rid;
+    PageNum initialPageNum;
+
+    bool isFirstIteration = true;
+    // Insert just enough records to fill up one page.
+    while (true)
+    {
+        int size = 0;
+        void *record = calloc(1000, sizeof(uint8_t));
+        prepareLargeRecord(recordDescriptor.size(), nullsIndicator, index++, record, &size);
+
+        auto rc = rbfm->insertRecord(fileHandle, recordDescriptor, record, rid);
+        assert(rc == success && "Inserting a record should not fail.");
+        free(record);
+
+        if (isFirstIteration)
+        {
+            initialPageNum = rid.pageNum;
+            isFirstIteration = false;
+        }
+        else if (initialPageNum != rid.pageNum)
+        {
+            rbfm->deleteRecord(fileHandle, recordDescriptor, rid);
+            break;
+        }
+
+        rids.push_back(rid);
+        sizes.push_back(size);
+    }
+
+    free(nullsIndicator);
+    return page;
+}
+
+// create a page with all forwarded records.
+void *createForwardedPage(RecordBasedFileManager *rbfm, FileHandle &fileHandle)
+{
+    void *page = calloc(PAGE_SIZE, sizeof(char));
+    return page;
+}
+
