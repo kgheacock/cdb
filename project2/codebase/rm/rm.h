@@ -3,31 +3,40 @@
 #define _rm_h_
 
 #include <string>
+#include <string.h>
 #include <vector>
 
 #include "../rbf/rbfm.h"
 
 using namespace std;
 
-# define RM_EOF (-1)  // end of a scan operator
+#define RM_EOF (-1) // end of a scan operator
 
 // RM_ScanIterator is an iteratr to go through tuples
-class RM_ScanIterator {
+class RM_ScanIterator
+{
 public:
-  RM_ScanIterator() {};
-  ~RM_ScanIterator() {};
+  RM_ScanIterator(){};
+  ~RM_ScanIterator(){};
 
   // "data" follows the same format as RelationManager::insertTuple()
   RC getNextTuple(RID &rid, void *data) { return RM_EOF; };
   RC close() { return -1; };
 };
 
-
+struct Table
+{
+  int tableId;
+  string tableName;
+  string fileName;
+  //50 + 50 + sizeof(int)
+  size_t size = 104;
+};
 // Relation Manager
 class RelationManager
 {
 public:
-  static RelationManager* instance();
+  static RelationManager *instance();
 
   RC createCatalog();
 
@@ -56,12 +65,11 @@ public:
   // Scan returns an iterator to allow the caller to go through the results one by one.
   // Do not store entire results in the scan iterator.
   RC scan(const string &tableName,
-      const string &conditionAttribute,
-      const CompOp compOp,                  // comparison type such as "<" and "="
-      const void *value,                    // used in the comparison
-      const vector<string> &attributeNames, // a list of projected attributes
-      RM_ScanIterator &rm_ScanIterator);
-
+          const string &conditionAttribute,
+          const CompOp compOp,                  // comparison type such as "<" and "="
+          const void *value,                    // used in the comparison
+          const vector<string> &attributeNames, // a list of projected attributes
+          RM_ScanIterator &rm_ScanIterator);
 
 protected:
   RelationManager();
@@ -70,6 +78,14 @@ protected:
 private:
   static RelationManager *_rm;
   static RecordBasedFileManager *_rbfm;
+  const string tableCatalogName = "Tables";
+  const string columnCatalogName = "Columns";
+  const string fileSuffix = ".t";
+  vector<Attribute> tableCatalogAttributes;
+  vector<Attribute> columnCatalogAttributes;
+  void addTableToCatalog(Table table, const vector<Attribute> &attrs);
+  void addColumnsToCatalog(const vector<Attribute> &attrs, int tableId);
+  int getTableId(const string &tableName, RID &rid);
 };
 
 #endif
