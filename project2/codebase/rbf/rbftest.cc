@@ -1203,6 +1203,7 @@ namespace RBFTest_14
 
             free(updatedRecord);
             free(newRecord);
+            free(originalRecord);
             free(page);
             cout << "RBF Test Case 14 Finished (unforwarded to unforwarded, const)" << endl << endl;
             return success;
@@ -1380,6 +1381,8 @@ namespace RBFTest_14
             assert(updated_eq_new && "Updated record should be equal to the new record.");
 
             cout << "RBF Test Case 14 Finished (forwarded, updated record on same page as before)" << endl << endl;
+            free(newRecord);
+            free(updatedRecord);
             return success;
         }
 
@@ -1416,6 +1419,8 @@ namespace RBFTest_14
             assert(updated_eq_new && "Updated record should be equal to the new record.");
 
             cout << "RBF Test Case 14 Finished (forwarded, updated record on different page as before)" << endl << endl;
+            free(newRecord);
+            free(updatedRecord);
             return success;
         }
 

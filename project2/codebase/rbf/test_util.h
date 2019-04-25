@@ -452,5 +452,8 @@ void createForwardingPages(RecordBasedFileManager *rbfm, FileHandle &fileHandle,
 
     bool updated_eq_new = memcmp(updatedRecord, newRecord, newSize) == 0 ? true : false;
     assert(updated_eq_new && "Updated record should be equal to the new record.");
+
+    free(updatedRecord);
+    free(newRecord);
 }
 

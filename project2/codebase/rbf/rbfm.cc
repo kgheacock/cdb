@@ -174,24 +174,30 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
     SlotDirectoryHeader slotHeader = getSlotDirectoryHeader(pageData);
     
     if(slotHeader.recordEntriesNumber < rid.slotNum)
+    {
+        free(pageData);
         return RBFM_SLOT_DN_EXIST;
+    }
 
     // Gets the slot directory record entry data
     SlotDirectoryRecordEntry recordEntry = getSlotDirectoryRecordEntry(pageData, rid.slotNum);
 
     // Retrieve the actual entry data
     if (recordEntry.offset < 0)
+    {
+        free(pageData);
         return RBFM_SLOT_DN_EXIST;
+    }
 
     // TODO: test reading record from forwarded slot.
     if (isSlotForwarding(recordEntry))
     {
+        free(pageData);
         RID new_rid = getRID(recordEntry);
         return readRecord(fileHandle, recordDescriptor, new_rid, data);
     }
 
     getRecordAtOffset(pageData, recordEntry.offset, recordDescriptor, data);
-
     free(pageData);
     return SUCCESS;
 }
@@ -504,15 +510,24 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
 
     auto rc = fileHandle.readPage(rid.pageNum, pageData);
     if (rc != SUCCESS)
+    {
+        free(pageData);
         return RBFM_READ_FAILED;
+    }
 
     SlotDirectoryHeader directoryHeader = getSlotDirectoryHeader(pageData);
     if (rid.slotNum >= directoryHeader.recordEntriesNumber)
+    {
+        free(pageData);
         return RBFM_SLOT_DN_EXIST;
+    }
 
     SlotDirectoryRecordEntry recordEntry = getSlotDirectoryRecordEntry(pageData, rid.slotNum);
     if (recordEntry.offset < 0)
+    {
+        free(pageData);
         return RBFM_SLOT_DN_EXIST;
+    }
 
     if (isSlotForwarding(recordEntry))
     {
@@ -524,6 +539,7 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
         recordEntry.offset = -1; // Clean up forwarding by marking the slot as empty.
         markSlotAsTerminal(recordEntry);
         setSlotDirectoryRecordEntry(pageData, rid.slotNum, recordEntry);
+        free(pageData);
         return SUCCESS;
     }
     
