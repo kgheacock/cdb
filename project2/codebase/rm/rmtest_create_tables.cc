@@ -38,5 +38,6 @@ int main()
   rc = createLargeTable("tbl_employee4");
   assert (rc == success && "Creating a table should not fail.");
 
+  cout << endl << "[PASSED] RM TEST - Creating the Catalog and user tables" << endl;
   return success;
 }

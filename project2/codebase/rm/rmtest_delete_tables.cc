@@ -4,7 +4,7 @@ int main()
 {
 
   // By executing this script, the following tables including the system tables will be removed.
-  cout << endl << "***** RM TEST - Deleting the Catalog and User tables *****" << endl;
+  cout << endl << "***** RM TEST - Deleting the Catalog and user tables *****" << endl;
 
   RC rc = rm->deleteTable("tbl_employee");
   if (rc != 0) {
@@ -32,5 +32,6 @@ int main()
 	  return rc;
   }
 
+  cout << endl << "[PASSED] RM TEST - Deleting the Catalog and user tables" << endl;
   return success;
 }

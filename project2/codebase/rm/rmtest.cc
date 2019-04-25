@@ -191,7 +191,7 @@ RC TEST_RM_3(const string &tableName, const int nameLength, const string &name, 
         free(tuple);
         free(updatedTuple);
         free(returnedData);
-        return 0;
+        return success;
     }
     else
     {
@@ -379,7 +379,7 @@ RC TEST_RM_6(const string &tableName)
 
     free(returnedData);
     cout << "***** Test Case 6 Finished. The result will be examined. *****" << endl << endl;
-    return 0;
+    return success;
 }
 
 RC TEST_RM_7(const string &tableName)
@@ -895,7 +895,7 @@ RC TEST_RM_14(const string &tableName)
     // Set up the iterator
     RM_ScanIterator rmsi;
     vector<string> projected_attrs;
-    for (int i = 0; i < attrs.size(); i++){
+    for (long unsigned int i = 0; i < attrs.size(); i++){
       projected_attrs.push_back(attrs[i].name);
     }
 
@@ -925,7 +925,7 @@ RC TEST_RM_14(const string &tableName)
 
     free(returnedData);
     cout << "***** Test Case 14 Finished. The result will be examined. *****"<<endl;
-    return 0;
+    return success;
 }
 
 RC TEST_RM_15(const string &tableName)
@@ -957,7 +957,7 @@ RC TEST_RM_15(const string &tableName)
     // Set up the iterator
     RM_ScanIterator rmsi;
     vector<string> projected_attrs;
-    for (int i = 0; i < attrs.size(); i++){
+    for (long unsigned int i = 0; i < attrs.size(); i++){
       projected_attrs.push_back(attrs[i].name);
     }
 
@@ -987,45 +987,56 @@ RC TEST_RM_15(const string &tableName)
 
     free(returnedData);
     cout << "***** Test Case 15 Finished. The result will be examined. *****" << endl;
-    return 0;
+    return success;
 }
 
 int main()
 {
     // Get Attributes
     RC rcmain = TEST_RM_0("tbl_employee");
+    assert(rcmain == success && "[FAILED] RM test 0");
 
     rcmain = TEST_RM_1("tbl_employee", 8, "Anteater", 27, 6.2, 10000);
+    assert(rcmain == success && "[FAILED] RM test 1");
     
     rcmain = TEST_RM_2("tbl_employee", 6, "Peters", 23, 5.9, 8000);
+    assert(rcmain == success && "[FAILED] RM test 2");
 
     rcmain = TEST_RM_3("tbl_employee", 6, "Thomas", 28, 6.5, 6000);
+    assert(rcmain == success && "[FAILED] RM test 3");
 
     rcmain = TEST_RM_4("tbl_employee", 7, "Hoffman", 31, 5.8, 9999);
+    assert(rcmain == success && "[FAILED] RM test 4");
 
     rcmain = TEST_RM_5("tbl_employee", 6, "Martin", 26, 173.6, 8000);
+    assert(rcmain == success && "[FAILED] RM test 5");
 
     rcmain = TEST_RM_6("tbl_employee3");
+    assert(rcmain == success && "[FAILED] RM test 6");
 
     rcmain = TEST_RM_7("tbl_employee3");
+    assert(rcmain == success && "[FAILED] RM test 7");
 
     vector<RID> rids;
     vector<int> sizes;
 
 	// Insert Tuple
     rcmain = TEST_RM_8("tbl_employee4", rids, sizes);
+    assert(rcmain == success && "[FAILED] RM test 8");
 
     vector<RID> rids2;
     vector<int> sizes2;
 
 	// Read Tuple
     rcmain = TEST_RM_09("tbl_employee4", rids2, sizes2);
+    assert(rcmain == success && "[FAILED] RM test 9");
 
     vector<RID> rids3;
     vector<int> sizes3;
 
 	 // Update Tuple
     rcmain = TEST_RM_10("tbl_employee4", rids3, sizes3);
+    assert(rcmain == success && "[FAILED] RM test 10");
     
 
     vector<RID> rids4;
@@ -1033,29 +1044,37 @@ int main()
 
 	// Delete Tuple
     rcmain = TEST_RM_11("tbl_employee4", rids4);
+    assert(rcmain == success && "[FAILED] RM test 11");
     
     // Scan
     rcmain = TEST_RM_12("tbl_employee4");
+    assert(rcmain == success && "[FAILED] RM test 12");
 
     // Scan with conditions
     rcmain = createTable("tbl_b_employee4");
+    assert(rcmain == success && "[FAILED] createTable for RM test 13 preperation");
     rcmain = TEST_RM_13("tbl_b_employee4");
+    assert(rcmain == success && "[FAILED] RM test 0");
 
 	// Scan with conditions
     rcmain = createTable("tbl_b_employee5");
+    assert(rcmain == success && "[FAILED] createTable for RM test 13b preperation");
     rcmain = TEST_RM_13b("tbl_b_employee5");
+    assert(rcmain == success && "[FAILED] RM test 13b");
 
     // NOTE: your Tables table must be called "Tables"
     string catalog_table_name = "Tables";
 
     // Test Catalog Information
     rcmain = TEST_RM_14(catalog_table_name);
+    assert(rcmain == success && "[FAILED] RM test 14");
     
     // NOTE: your Columns table must be called "Columns"
     string catalog_table_name_columns = "Columns";
 
     // Test Catalog Information
     rcmain = TEST_RM_15(catalog_table_name_columns);
+    assert(rcmain == success && "[FAILED] RM test 15");
     
     return 0;
 }
