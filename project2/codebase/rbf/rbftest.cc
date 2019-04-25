@@ -1084,7 +1084,7 @@ namespace RBFTest_14
         // Updated record remains on same page (primary page).
         int toUnforwarded_shrinkSize(RecordBasedFileManager *rbfm)
         {
-            cout << "****In RBF Test Case 14 (to unforwarded, shrink) ****" << endl;
+            cout << "****In RBF Test Case 14 (unforwarded to unforwarded, shrink) ****" << endl;
             int index = 0;
             vector<Attribute> recordDescriptor;
             vector<RID> rids;
@@ -1155,13 +1155,13 @@ namespace RBFTest_14
             free(maxRecord);
             free(minRecord);
             free(page);
-            cout << "RBF Test Case 14 Finished (to unforwarded, shrink)" << endl << endl;
+            cout << "RBF Test Case 14 Finished (unforwarded to unforwarded, shrink)" << endl << endl;
             return success;
         }
 
         int toUnforwarded_constSize(RecordBasedFileManager *rbfm)
         {
-            cout << "****In RBF Test Case 14 (to unforwarded, const) ****" << endl;
+            cout << "****In RBF Test Case 14 (unforwarded to unforwarded, const) ****" << endl;
             int index = 0;
             vector<Attribute> recordDescriptor;
             vector<RID> rids;
@@ -1176,7 +1176,7 @@ namespace RBFTest_14
             void *originalRecord = calloc(originalSize, sizeof(uint8_t));
 
             auto rc = rbfm->readRecord(fileHandle, recordDescriptor, originalRID, originalRecord);
-            assert(rc == SUCCESS && "Reading the min record should not fail.");
+            assert(rc == SUCCESS && "Reading record should not fail.");
             cout << "Record found ("; originalRID.print(); cout << "):" << endl;
             rbfm->printRecord(recordDescriptor, originalRecord);
 
@@ -1187,8 +1187,6 @@ namespace RBFTest_14
             cout << "Updating record ("; originalRID.print(); cout << "):" << endl;
             rbfm->printRecord(recordDescriptor, newRecord);
 
-            // Replace the smallest record with a copy of the largest record.
-            // Guarantee that there is free space for the updatedRecord.
             rc = rbfm->updateRecord(fileHandle, recordDescriptor, newRecord, originalRID);
             assert(rc == SUCCESS && "Update record should not fail when shrinking size.");
 
@@ -1201,19 +1199,19 @@ namespace RBFTest_14
 
             // Updated record SHOULD BE new record.
             bool updated_eq_new = memcmp(updatedRecord, newRecord, originalSize) == 0 ? true : false;
-            assert(updated_eq_new && "Updated record should not be the max record.");
+            assert(updated_eq_new && "Updated record should be the new record.");
 
             free(updatedRecord);
             free(newRecord);
             free(page);
-            cout << "RBF Test Case 14 Finished (to unforwarded, const)" << endl << endl;
+            cout << "RBF Test Case 14 Finished (unforwarded to unforwarded, const)" << endl << endl;
             return success;
         }
 
         // Updated record may increase in size but remain on same page (if there's space).
         int toUnforwarded_incrSize(RecordBasedFileManager *rbfm)
         {
-            cout << "****In RBF Test Case 14 (to unforwarded, incr) ****" << endl;
+            cout << "****In RBF Test Case 14 (unforwarded to unforwarded, incr) ****" << endl;
             int index = 0;
             vector<Attribute> recordDescriptor;
             vector<RID> rids;
@@ -1278,25 +1276,88 @@ namespace RBFTest_14
 
             // Updated record SHOULD BE MAX record.
             bool updated_eq_max = memcmp(updatedRecord, maxRecord, sizes[argminSize]) == 0 ? true : false;
-            assert(updated_eq_max && "Updated record should not be the max record.");
+            assert(updated_eq_max && "Updated record should be the max record.");
 
             // Updated record SHOULD NOT BE MIN record.
             bool updated_eq_min = memcmp(updatedRecord, minRecord, sizes[argminSize]) == 0 ? true : false;
-            assert(!updated_eq_min && "Updated record should be the min record.");
+            assert(!updated_eq_min && "Updated record should not be the min record.");
 
             free(updatedRecord);
             free(maxRecord);
             free(minRecord);
             free(page);
-            cout << "RBF Test Case 14 Finished (to unforwarded, incr)" << endl << endl;
+            cout << "RBF Test Case 14 Finished (unforwarded to unforwarded, incr)" << endl << endl;
             return success;
         }
 
         // Updated record is now forwarded.
+        // The way we set this up is pretty brute force...
+        // createUnforwardedPage calls prepareLargeRecord where records have somewhere around 175-250 bytes in size.
+        // So we update a record to be > 2048 bytes, forcing it onto another page.
+        // updateRecord() should then properly forward the original RID to the new/updated record.
         int toForwarded(RecordBasedFileManager *rbfm)
         {
-            assert(false);
-            return -1;
+            cout << "****In RBF Test Case 14 (unforwarded to forwarded) ****" << endl;
+            int rc;
+            RID lastRID;
+            PageNum initialPageNum;
+            bool firstIteration = true;
+
+            RID rid;
+            int size;
+            vector<Attribute> recordDescriptor;
+
+            // Insert records until the page is full.
+            do
+            {
+                void *record = calloc(PAGE_SIZE, sizeof(uint8_t));
+                prepareRecord_varchar2048("a", recordDescriptor, record, &size); 
+                rc = rbfm->insertRecord(fileHandle, recordDescriptor, record, rid);
+                assert(rc == SUCCESS && "Insert record should not fail.");
+                free(record);
+
+                if (firstIteration)
+                {
+                    initialPageNum = rid.pageNum;
+                    lastRID = rid;
+                    firstIteration = false;
+                    continue;
+                }
+
+                if (rid.pageNum == initialPageNum)
+                {
+                    lastRID = rid;
+                }
+                else
+                {
+                    rc = rbfm->deleteRecord(fileHandle, recordDescriptor, rid);
+                    assert(rc == SUCCESS && "Delete record should not fail.");
+                    break;
+                }
+            }
+            while (true);
+
+            // Allocate our huge record s.t. it's guaranteed to forward.
+            string lengthyVarChar (2048, 'b');
+            int newSize;
+            void *newRecord = calloc(PAGE_SIZE, sizeof(uint8_t));
+            prepareRecord_varchar2048(lengthyVarChar, recordDescriptor, newRecord, &newSize); 
+
+            rc = rbfm->updateRecord(fileHandle, recordDescriptor, newRecord, lastRID);
+            assert(rc == SUCCESS && "Updating record should not fail.");
+
+            void *updatedRecord = calloc(newSize, sizeof(uint8_t));
+            rc = rbfm->readRecord(fileHandle, recordDescriptor, lastRID, updatedRecord);
+            assert(rc == SUCCESS && "Reading updated record should not fail.");
+
+            bool updated_eq_new = memcmp(updatedRecord, newRecord, newSize) == 0 ? true : false;
+            assert(updated_eq_new && "Updated record should be equal to the new record.");
+
+            free(updatedRecord);
+            free(newRecord);
+
+            cout << "RBF Test Case 14 Finished (unforwarded to forwarded)" << endl << endl;
+            return success;
         }
 
         int runAll(RecordBasedFileManager *rbfm)

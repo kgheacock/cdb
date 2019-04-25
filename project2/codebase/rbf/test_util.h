@@ -212,6 +212,38 @@ void createRecordDescriptor(vector<Attribute> &recordDescriptor) {
 
 }
 
+void createRecordDescriptor_varchar2048(vector<Attribute> &recordDescriptor)
+{
+    recordDescriptor.clear();
+    Attribute attr;
+    attr.name = "Char";
+    attr.type = TypeVarChar;
+    attr.length = (AttrLength)2048;
+    recordDescriptor.push_back(attr);
+}
+
+void prepareRecord_varchar2048(string varchar, vector<Attribute> &recordDescriptor, void *buffer, int *size)
+{
+    int offset = 0;
+    createRecordDescriptor_varchar2048(recordDescriptor);
+
+    // Null-indicators
+    int nullFieldsIndicatorActualSize = getActualByteForNullsIndicator(recordDescriptor.size());
+    void *nullFieldsIndicator = calloc(nullFieldsIndicatorActualSize, sizeof(uint8_t));
+    memcpy((char *)buffer + offset, nullFieldsIndicator, nullFieldsIndicatorActualSize);
+    free(nullFieldsIndicator);
+    offset += nullFieldsIndicatorActualSize;
+
+    const int nchars = varchar.size();
+    memcpy((char *)buffer + offset, &nchars, sizeof(int));
+    offset += sizeof(int);
+
+    memcpy((char *)buffer + offset, varchar.c_str(), nchars);
+    offset += nchars;
+
+    *size = offset;
+}
+
 void createLargeRecordDescriptor(vector<Attribute> &recordDescriptor)
 {
     char *suffix = (char *)malloc(10);

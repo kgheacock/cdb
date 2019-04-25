@@ -97,7 +97,7 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
             return RBFM_READ_FAILED;
 
         const auto freeSpaceSize = getPageFreeSpaceSize(pageData);
-        const bool mayFillEmptySlot = freeSpaceSize >= sizeof(SlotDirectoryRecordEntry);
+        const bool mayFillEmptySlot = freeSpaceSize >= recordSize;
         const bool canAllocateWithNewSlot = freeSpaceSize >= sizeof(SlotDirectoryRecordEntry) + recordSize;
 
         // Check for allocated but unused slot.
