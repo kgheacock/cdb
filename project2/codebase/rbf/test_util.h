@@ -157,6 +157,36 @@ void prepareLargeRecord(int fieldCount, unsigned char *nullFieldsIndicator, cons
     *size = offset;
 }
 
+// Increments all integers within a prepared large record.
+void prepareLargeRecord_incrementIntegers(int index, vector<Attribute> recordDescriptor, void *buffer, RecordBasedFileManager *rbfm)
+{
+    int offset = 0;
+
+    // compute the count
+    int count = (index + 2) % 50 + 1;
+
+    // Null-indicators
+    int nullFieldsIndicatorActualSize = getActualByteForNullsIndicator(recordDescriptor.size());
+
+    // Null-indicators
+    offset += nullFieldsIndicatorActualSize;
+
+    // Actual data
+    for(int i = 0; i < 10; i++)
+    {
+        // Skip over VARCHAR length and value.
+        offset += sizeof(int) + count;
+
+        // compute the integer
+        auto newIndex = index + 1;
+        memcpy((char *)buffer + offset, &newIndex, sizeof(int));
+        offset += sizeof(int);
+
+        // Skip over the float.
+        offset += sizeof(float);
+    }
+}
+
 void createRecordDescriptor(vector<Attribute> &recordDescriptor) {
 
     Attribute attr;
@@ -305,7 +335,7 @@ void *createUnforwardedPage(RecordBasedFileManager *rbfm, FileHandle &fileHandle
         int size = 0;
 
         void *record = calloc(1000, sizeof(uint8_t));
-        prepareLargeRecord(recordDescriptor.size(), nullsIndicator, index++, record, &size);
+        prepareLargeRecord(recordDescriptor.size(), nullsIndicator, index, record, &size);
         auto rc = rbfm->insertRecord(fileHandle, recordDescriptor, record, rid);
         free(record);
 
@@ -322,6 +352,7 @@ void *createUnforwardedPage(RecordBasedFileManager *rbfm, FileHandle &fileHandle
             break;
         }
 
+        index++;
         rids.push_back(rid);
         sizes.push_back(size);
     }
