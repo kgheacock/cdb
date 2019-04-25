@@ -1159,18 +1159,137 @@ namespace RBFTest_14
             return success;
         }
 
-        // Updated record remains on same page (primary page).
         int toUnforwarded_constSize(RecordBasedFileManager *rbfm)
         {
-            assert(false);
-            return -1;
+            cout << "****In RBF Test Case 14 (to unforwarded, const) ****" << endl;
+            int index = 0;
+            vector<Attribute> recordDescriptor;
+            vector<RID> rids;
+            vector<int> sizes;
+            void *page = createUnforwardedPage(rbfm, fileHandle, index, recordDescriptor, rids, sizes);
+            assert(page != nullptr && "Unforwarded page creation should not fail.");
+
+            // Load some record.
+            int originalIndex = index - 1; // Index was setup for the next record.  We want the current record.
+            RID originalRID = rids.back();
+            int originalSize = sizes.back();
+            void *originalRecord = calloc(originalSize, sizeof(uint8_t));
+
+            auto rc = rbfm->readRecord(fileHandle, recordDescriptor, originalRID, originalRecord);
+            assert(rc == SUCCESS && "Reading the min record should not fail.");
+            cout << "Record found ("; originalRID.print(); cout << "):" << endl;
+            rbfm->printRecord(recordDescriptor, originalRecord);
+
+            // Prepare updated version of loaded record.
+            void *newRecord = calloc(originalSize, sizeof(uint8_t));
+            memcpy(newRecord, originalRecord, originalSize);
+            prepareLargeRecord_incrementIntegers(originalIndex, recordDescriptor, newRecord, rbfm);
+            cout << "Updating record ("; originalRID.print(); cout << "):" << endl;
+            rbfm->printRecord(recordDescriptor, newRecord);
+
+            // Replace the smallest record with a copy of the largest record.
+            // Guarantee that there is free space for the updatedRecord.
+            rc = rbfm->updateRecord(fileHandle, recordDescriptor, newRecord, originalRID);
+            assert(rc == SUCCESS && "Update record should not fail when shrinking size.");
+
+            // Load updated record.
+            void *updatedRecord = calloc(originalSize, sizeof(uint8_t));
+            rc = rbfm->readRecord(fileHandle, recordDescriptor, originalRID, updatedRecord);
+            assert(rc == SUCCESS && "Reading the updated record should not fail.");
+            cout << "Updated record found ("; originalRID.print(); cout << "):" << endl;
+            rbfm->printRecord(recordDescriptor, updatedRecord);
+
+            // Updated record SHOULD BE new record.
+            bool updated_eq_new = memcmp(updatedRecord, newRecord, originalSize) == 0 ? true : false;
+            assert(updated_eq_new && "Updated record should not be the max record.");
+
+            free(updatedRecord);
+            free(newRecord);
+            free(page);
+            cout << "RBF Test Case 14 Finished (to unforwarded, const)" << endl << endl;
+            return success;
         }
 
         // Updated record may increase in size but remain on same page (if there's space).
         int toUnforwarded_incrSize(RecordBasedFileManager *rbfm)
         {
-            assert(false);
-            return -1;
+            cout << "****In RBF Test Case 14 (to unforwarded, incr) ****" << endl;
+            int index = 0;
+            vector<Attribute> recordDescriptor;
+            vector<RID> rids;
+            vector<int> sizes;
+            void *page = createUnforwardedPage(rbfm, fileHandle, index, recordDescriptor, rids, sizes);
+            assert(page != nullptr && "Unforwarded page creation should not fail.");
+
+            /* I'm not sure how prepareLargeRecord calculates the size. From inserting records,
+             * it seems that the size is always increasing, but it may wrap around at some point.
+             * To be safe, we just get the min and max records.
+             */
+            auto minSize = INT_MAX;
+            auto maxSize = INT_MIN;
+            auto argminSize = -1; // Index of min.
+            auto argmaxSize = -1; // Index of max.
+            for (auto it = sizes.begin(); it != sizes.end(); ++it) {
+                    auto size = *it;
+                    int index = distance(sizes.begin(), it);
+                    if (size <= minSize)
+                    {
+                        minSize = size;
+                        argminSize = index;
+                    }
+                    if (size >= maxSize)
+                    {
+                        maxSize = size;
+                        argmaxSize = index;
+                    }
+            }
+            assert(argminSize != -1);  // We must have found some min.
+            assert(argmaxSize != -1);  // We must have found some max.
+            assert(minSize != maxSize); // And we need a record that is larger than the min (to shrink it).
+            
+            // Load smallest record.
+            void *minRecord = calloc(sizes[argminSize], sizeof(uint8_t));
+            auto rc = rbfm->readRecord(fileHandle, recordDescriptor, rids[argminSize], minRecord);
+            assert(rc == SUCCESS && "Reading the min record should not fail.");
+            cout << "Min record found ("; rids[argminSize].print(); cout << "):" << endl;
+            rbfm->printRecord(recordDescriptor, minRecord);
+
+            // Load largest record.
+            void *maxRecord = calloc(sizes[argmaxSize], sizeof(uint8_t));
+            rc = rbfm->readRecord(fileHandle, recordDescriptor, rids[argmaxSize], maxRecord);
+            assert(rc == SUCCESS && "Reading the max record should not fail.");
+            cout << "Max record found ("; rids[argmaxSize].print(); cout << "):" << endl;
+            rbfm->printRecord(recordDescriptor, maxRecord);
+
+
+            // Replace the smallest record with a copy of the largest record.
+            // Guarantee that there is free space for the updatedRecord.
+            rc = rbfm->deleteRecord(fileHandle, recordDescriptor, rids[argmaxSize]);
+            assert(rc == SUCCESS && "Deleting largest record should not fail.");
+            rc = rbfm->updateRecord(fileHandle, recordDescriptor, maxRecord, rids[argminSize]);
+            assert(rc == SUCCESS && "Update record should not fail when shrinking size.");
+
+            // Load updated record.
+            void *updatedRecord = calloc(sizes[argmaxSize], sizeof(uint8_t));
+            rc = rbfm->readRecord(fileHandle, recordDescriptor, rids[argminSize], updatedRecord);
+            assert(rc == SUCCESS && "Reading the updated record should not fail.");
+            cout << "Updated record found ("; rids[argminSize].print(); cout << "):" << endl;
+            rbfm->printRecord(recordDescriptor, updatedRecord);
+
+            // Updated record SHOULD BE MAX record.
+            bool updated_eq_max = memcmp(updatedRecord, maxRecord, sizes[argminSize]) == 0 ? true : false;
+            assert(updated_eq_max && "Updated record should not be the max record.");
+
+            // Updated record SHOULD NOT BE MIN record.
+            bool updated_eq_min = memcmp(updatedRecord, minRecord, sizes[argminSize]) == 0 ? true : false;
+            assert(!updated_eq_min && "Updated record should be the min record.");
+
+            free(updatedRecord);
+            free(maxRecord);
+            free(minRecord);
+            free(page);
+            cout << "RBF Test Case 14 Finished (to unforwarded, incr)" << endl << endl;
+            return success;
         }
 
         // Updated record is now forwarded.
