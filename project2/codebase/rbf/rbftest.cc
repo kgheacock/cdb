@@ -1298,64 +1298,10 @@ namespace RBFTest_14
         int toForwarded(RecordBasedFileManager *rbfm)
         {
             cout << "****In RBF Test Case 14 (unforwarded to forwarded) ****" << endl;
-            int rc;
-            RID lastRID;
-            PageNum initialPageNum;
-            bool firstIteration = true;
-
-            RID rid;
-            int size;
+            RID forwardingRID;
+            vector<RID> rids;
             vector<Attribute> recordDescriptor;
-
-            // Insert records until the page is full.
-            do
-            {
-                void *record = calloc(PAGE_SIZE, sizeof(uint8_t));
-                prepareRecord_varchar2048("a", recordDescriptor, record, &size); 
-                rc = rbfm->insertRecord(fileHandle, recordDescriptor, record, rid);
-                assert(rc == SUCCESS && "Insert record should not fail.");
-                free(record);
-
-                if (firstIteration)
-                {
-                    initialPageNum = rid.pageNum;
-                    lastRID = rid;
-                    firstIteration = false;
-                    continue;
-                }
-
-                if (rid.pageNum == initialPageNum)
-                {
-                    lastRID = rid;
-                }
-                else
-                {
-                    rc = rbfm->deleteRecord(fileHandle, recordDescriptor, rid);
-                    assert(rc == SUCCESS && "Delete record should not fail.");
-                    break;
-                }
-            }
-            while (true);
-
-            // Allocate our huge record s.t. it's guaranteed to forward.
-            string lengthyVarChar (2048, 'b');
-            int newSize;
-            void *newRecord = calloc(PAGE_SIZE, sizeof(uint8_t));
-            prepareRecord_varchar2048(lengthyVarChar, recordDescriptor, newRecord, &newSize); 
-
-            rc = rbfm->updateRecord(fileHandle, recordDescriptor, newRecord, lastRID);
-            assert(rc == SUCCESS && "Updating record should not fail.");
-
-            void *updatedRecord = calloc(newSize, sizeof(uint8_t));
-            rc = rbfm->readRecord(fileHandle, recordDescriptor, lastRID, updatedRecord);
-            assert(rc == SUCCESS && "Reading updated record should not fail.");
-
-            bool updated_eq_new = memcmp(updatedRecord, newRecord, newSize) == 0 ? true : false;
-            assert(updated_eq_new && "Updated record should be equal to the new record.");
-
-            free(updatedRecord);
-            free(newRecord);
-
+            createForwardingPages(rbfm, fileHandle, forwardingRID, recordDescriptor, rids);
             cout << "RBF Test Case 14 Finished (unforwarded to forwarded)" << endl << endl;
             return success;
         }
@@ -1384,22 +1330,111 @@ namespace RBFTest_14
     // Record is initially forwarded.
     namespace Forwarded
     {
+        RID forwardingRID;
+        vector<RID> rids;
+        vector<Attribute> recordDescriptor;
+        void beforeEach(RecordBasedFileManager *rbfm)
+        {
+            remove(fileName.c_str());
+
+            // Create the file.
+            auto rc = rbfm->createFile(fileName);
+            assert(rc == success && "Creating the file should not fail.");
+
+            rc = createFileShouldSucceed(fileName);
+            assert(rc == success && "Creating the file failed.");
+
+            // Open the file.
+            rc = rbfm->openFile(fileName, fileHandle);
+            assert(rc == success && "Opening the file should not fail.");
+
+            createForwardingPages(rbfm, fileHandle, forwardingRID, recordDescriptor, rids);
+        }
+
+        void afterEach(RecordBasedFileManager *rbfm)
+        {
+            // Close the file.
+            auto rc = rbfm->closeFile(fileHandle);
+            assert(rc == success && "Closing the file should not fail.");
+            remove(fileName.c_str());
+        }
+
         int toSamePage(RecordBasedFileManager *rbfm)
         {
-            assert(false);
-            return -1;
+            cout << "****In RBF Test Case 14 (forwarded, updated record on same page as before) ****" << endl;
+
+            // Allocate our huge record s.t. it's guaranteed to forward.
+            string lengthyVarChar (2048, 'c');
+            int newSize;
+            void *newRecord = calloc(PAGE_SIZE, sizeof(uint8_t));
+            prepareRecord_varchar2048(lengthyVarChar, recordDescriptor, newRecord, &newSize); 
+
+            auto rc = rbfm->updateRecord(fileHandle, recordDescriptor, newRecord, forwardingRID);
+            assert(rc == SUCCESS && "Updating record should not fail.");
+
+            void *updatedRecord = calloc(newSize, sizeof(uint8_t));
+            rc = rbfm->readRecord(fileHandle, recordDescriptor, forwardingRID, updatedRecord);
+            assert(rc == SUCCESS && "Reading updated record should not fail.");
+
+            bool updated_eq_new = memcmp(updatedRecord, newRecord, newSize) == 0 ? true : false;
+            assert(updated_eq_new && "Updated record should be equal to the new record.");
+
+            cout << "RBF Test Case 14 Finished (forwarded, updated record on same page as before)" << endl << endl;
+            return success;
         }
 
         int toDiffPage(RecordBasedFileManager *rbfm)
         {
-            assert(false);
-            return -1;
+            cout << "****In RBF Test Case 14 (forwarded, updated record on different page as before) ****" << endl;
+
+            // Delete records that are not the forwarding.
+            // This clears up space in the page for our updated record in the next step.
+            for (auto it = rids.begin(); it != rids.end(); it++)
+            {
+                RID rid = *it;
+                if (rid != forwardingRID)
+                {
+                    auto rc = rbfm->deleteRecord(fileHandle, recordDescriptor, rid);
+                    assert(rc == SUCCESS && "Delete record should not fail.");
+                }
+            }
+
+            // Allocate some record s.t. it's guaranteed to forward to the previous page.
+            string lengthyVarChar (1, 'b');
+            int newSize;
+            void *newRecord = calloc(PAGE_SIZE, sizeof(uint8_t));
+            prepareRecord_varchar2048(lengthyVarChar, recordDescriptor, newRecord, &newSize); 
+
+            auto rc = rbfm->updateRecord(fileHandle, recordDescriptor, newRecord, forwardingRID);
+            assert(rc == SUCCESS && "Updating record should not fail.");
+
+            void *updatedRecord = calloc(newSize, sizeof(uint8_t));
+            rc = rbfm->readRecord(fileHandle, recordDescriptor, forwardingRID, updatedRecord);
+            assert(rc == SUCCESS && "Reading updated record should not fail.");
+
+            bool updated_eq_new = memcmp(updatedRecord, newRecord, newSize) == 0 ? true : false;
+            assert(updated_eq_new && "Updated record should be equal to the new record.");
+
+            cout << "RBF Test Case 14 Finished (forwarded, updated record on different page as before)" << endl << endl;
+            return success;
         }
 
-        int toPrimaryPage(RecordBasedFileManager *rbfm)
+        int runAll(RecordBasedFileManager *rbfm)
         {
-            assert(false);
-            return -1;
+            vector<int (*)(RecordBasedFileManager *)> fs
+            {
+                toSamePage,
+                toDiffPage,
+            };
+
+            for (auto f : fs)
+            {
+                beforeEach(rbfm);
+                auto rc = f(rbfm);
+                assert(rc == success);
+                afterEach(rbfm);
+            }
+            return success;
         }
     }
 };
@@ -1448,9 +1483,7 @@ int main()
     RBFTest_13(rbfm);
 
     RBFTest_14::Unforwarded::runAll(rbfm);
-    RBFTest_14::Forwarded::toSamePage(rbfm);
-    RBFTest_14::Forwarded::toDiffPage(rbfm);
-    RBFTest_14::Forwarded::toPrimaryPage(rbfm);
+    RBFTest_14::Forwarded::runAll(rbfm);
 
     return 0;
 }

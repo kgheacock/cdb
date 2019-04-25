@@ -15,6 +15,11 @@ bool operator==(const RID &x, const RID &y)
     return x.pageNum == y.pageNum && x.slotNum == y.slotNum;
 }
 
+bool operator!=(const RID &x, const RID &y)
+{
+    return !(x == y);
+}
+
 size_t RIDHasher::operator()(const RID rid) const
 {
     return hash<unsigned>{}(rid.pageNum ^ rid.slotNum);

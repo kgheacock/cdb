@@ -31,6 +31,7 @@ typedef struct
 } RID;
 
 bool operator==(const RID &x, const RID &y);
+bool operator!=(const RID &x, const RID &y);
 
 struct RIDHasher
 {

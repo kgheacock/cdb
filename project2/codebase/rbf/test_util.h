@@ -397,10 +397,60 @@ void *createUnforwardedPage(RecordBasedFileManager *rbfm, FileHandle &fileHandle
     return pageData;
 }
 
-// create a page with all forwarded records.
-void *createForwardedPage(RecordBasedFileManager *rbfm, FileHandle &fileHandle)
+
+// Creates two pages, where a slot in the first page forwards to a slot in the second.
+void createForwardingPages(RecordBasedFileManager *rbfm, FileHandle &fileHandle, RID &forwardingRID, vector<Attribute> &recordDescriptor, vector<RID> rids)
 {
-    void *page = calloc(PAGE_SIZE, sizeof(char));
-    return page;
+    int rc;
+    RID lastRID;
+    PageNum initialPageNum;
+    bool firstIteration = true;
+
+    RID rid;
+    int size;
+
+    // Insert records until the page is full.
+    do
+    {
+        void *record = calloc(PAGE_SIZE, sizeof(uint8_t));
+        prepareRecord_varchar2048("a", recordDescriptor, record, &size); 
+        rc = rbfm->insertRecord(fileHandle, recordDescriptor, record, rid);
+        assert(rc == SUCCESS && "Insert record should not fail.");
+        free(record);
+
+        if (firstIteration)
+        {
+            initialPageNum = rid.pageNum;
+            firstIteration = false;
+        }
+        else if (rid.pageNum != initialPageNum)
+        {
+            rc = rbfm->deleteRecord(fileHandle, recordDescriptor, rid);
+            assert(rc == SUCCESS && "Delete record should not fail.");
+            break;
+        }
+
+        lastRID = rid;
+        rids.push_back(rid);
+    }
+    while (true);
+
+    forwardingRID = lastRID;
+
+    // Allocate our huge record s.t. it's guaranteed to forward.
+    string lengthyVarChar (2048, 'b');
+    int newSize;
+    void *newRecord = calloc(PAGE_SIZE, sizeof(uint8_t));
+    prepareRecord_varchar2048(lengthyVarChar, recordDescriptor, newRecord, &newSize); 
+
+    rc = rbfm->updateRecord(fileHandle, recordDescriptor, newRecord, forwardingRID);
+    assert(rc == SUCCESS && "Updating record should not fail.");
+
+    void *updatedRecord = calloc(newSize, sizeof(uint8_t));
+    rc = rbfm->readRecord(fileHandle, recordDescriptor, forwardingRID, updatedRecord);
+    assert(rc == SUCCESS && "Reading updated record should not fail.");
+
+    bool updated_eq_new = memcmp(updatedRecord, newRecord, newSize) == 0 ? true : false;
+    assert(updated_eq_new && "Updated record should be equal to the new record.");
 }
 
