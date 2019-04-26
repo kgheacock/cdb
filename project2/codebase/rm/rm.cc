@@ -134,9 +134,9 @@ RC RelationManager::createCatalog()
     return SUCCESS;
 }
 
-Table RelationManager::getTableFromCatalog(const string &tableName, RID &rid)
+Table *RelationManager::getTableFromCatalog(const string &tableName, RID &rid)
 {
-    Table returnTable;
+    Table *returnTable;
 
     RM_ScanIterator tableCatalogIterator;
     vector<string> attrList;
@@ -147,7 +147,7 @@ Table RelationManager::getTableFromCatalog(const string &tableName, RID &rid)
     if (tableCatalogIterator.getNextTuple(rid, data) == RM_EOF)
     {
         tableCatalogIterator.close();
-        return returnTable;
+        return nullptr;
     }
     tableCatalogIterator.close();
     int tableId = 0;
@@ -160,9 +160,9 @@ Table RelationManager::getTableFromCatalog(const string &tableName, RID &rid)
     char fileName[sizeOfFileName + 1];
     memcpy(&fileName, (char *)data + offset, sizeOfFileName);
     fileName[sizeOfFileName] = '\0';
-    returnTable.fileName = fileName;
-    returnTable.tableId = tableId;
-    returnTable.tableName = tableName;
+    returnTable->fileName = fileName;
+    returnTable->tableId = tableId;
+    returnTable->tableName = tableName;
 
     return returnTable;
 }
@@ -195,8 +195,8 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
 RC RelationManager::deleteTable(const string &tableName)
 {
     RID rid;
-    Table table = getTableFromCatalog(tableName, rid);
-    int tableId = table.tableId;
+    Table *table = getTableFromCatalog(tableName, rid);
+    int tableId = table->tableId;
     if (tableId < 0)
         return -1;
     FileHandle tableCatalogFile;
