@@ -8,6 +8,8 @@
 
 #include "../rbf/rbfm.h"
 
+#define TABLE_DNE 8
+
 using namespace std;
 
 #define RM_EOF (-1) // end of a scan operator

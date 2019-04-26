@@ -143,7 +143,7 @@ Table *RelationManager::getTableFromCatalog(const string &tableName, RID &rid)
     attrList.push_back("table-id");
     attrList.push_back("file-name");
     scan(tableCatalogName, "table-name", CompOp::EQ_OP, &tableName, attrList, tableCatalogIterator);
-    void *data;
+    void *data = malloc(PAGE_SIZE);
     if (tableCatalogIterator.getNextTuple(rid, data) == RM_EOF)
     {
         tableCatalogIterator.close();
@@ -163,6 +163,7 @@ Table *RelationManager::getTableFromCatalog(const string &tableName, RID &rid)
     returnTable->fileName = fileName;
     returnTable->tableId = tableId;
     returnTable->tableName = tableName;
+    free(data);
 
     return returnTable;
 }
@@ -263,7 +264,13 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
 }
 
 RC RelationManager::insertTuple(const string &tableName, const void *data, RID &rid)
-{   // Todo - does table exist? Get filename from table object
+{    
+    // Check if the table exists. Create table object to get table file name
+    RID temp;
+    Table *table = getTableFromCatalog(tableName, temp);
+    if (table == nullptr) 
+        return TABLE_DNE;
+    
     FileHandle fileHandle;
     RC result = _rbfm->openFile(tableName + fileSuffix, fileHandle);
     if (result != SUCCESS) 
@@ -289,9 +296,15 @@ RC RelationManager::updateTuple(const string &tableName, const void *data, const
 }
 
 RC RelationManager::readTuple(const string &tableName, const RID &rid, void *data)
-{   // Todo - does table exist? Get filename from table object
+{
+    // Check if the table exists. Create table object to get table file name
+    RID temp;
+    Table *table = getTableFromCatalog(tableName, temp);
+    if (table == nullptr) 
+        return TABLE_DNE;
+    
     FileHandle fileHandle;
-    RC result = _rbfm->openFile(tableName + fileSuffix, fileHandle);
+    RC result = _rbfm->openFile(table->fileName, fileHandle);
     if (result != SUCCESS) 
         return result;
 
@@ -302,7 +315,6 @@ RC RelationManager::readTuple(const string &tableName, const RID &rid, void *dat
 
     result = _rbfm->readRecord(fileHandle, attributes, rid, data);
     return result;
-    return -1;
 }
 
 RC RelationManager::printTuple(const vector<Attribute> &attrs, const void *data)
