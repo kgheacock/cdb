@@ -27,7 +27,7 @@ RelationManager::RelationManager()
 RelationManager::~RelationManager()
 {
 }
-void RelationManager::addTableToCatalog(Table table, const vector<Attribute> &attrs)
+void RelationManager::addTableToCatalog(Table *table, const vector<Attribute> &attrs)
 {
     FileHandle catalogFile;
     _rbfm->openFile(tableCatalogName + fileSuffix, catalogFile);
@@ -37,21 +37,21 @@ void RelationManager::addTableToCatalog(Table table, const vector<Attribute> &at
     void *buffer = malloc(PAGE_SIZE);
     memcpy((char *)buffer + offset, &nullFields, 1);
     offset += 1;
-    memcpy((char *)buffer + offset, &table.tableId, sizeof(uint32_t));
+    memcpy((char *)buffer + offset, &table->tableId, sizeof(uint32_t));
     offset += sizeof(uint32_t);
-    int tableNameSize = table.tableName.length();
+    int tableNameSize = table->tableName.length();
     memcpy((char *)buffer + offset, &tableNameSize, sizeof(uint32_t));
     offset += sizeof(uint32_t);
-    memcpy((char *)buffer + offset, &table.tableName, tableNameSize);
+    memcpy((char *)buffer + offset, &table->tableName, tableNameSize);
     offset += tableNameSize;
-    int fileNameSize = table.fileName.length();
+    int fileNameSize = table->fileName.length();
     memcpy((char *)buffer + offset, &fileNameSize, sizeof(uint32_t));
     offset += sizeof(uint32_t);
-    memcpy((char *)buffer + offset, &table.fileName, fileNameSize);
+    memcpy((char *)buffer + offset, &table->fileName, fileNameSize);
     RID temp;
     _rbfm->insertRecord(catalogFile, tableCatalogAttributes, buffer, temp);
 
-    addColumnsToCatalog(attrs, table.tableId);
+    addColumnsToCatalog(attrs, table->tableId);
     free(buffer);
     _rbfm->closeFile(catalogFile);
 }
@@ -119,14 +119,8 @@ RC RelationManager::createCatalog()
     tableCatalogAttributes.push_back(fileName);
 
     //Create table objects
-    Table tableTable;
-    tableTable.tableId = getNextIndex();
-    tableTable.tableName = tableCatalogName;
-    tableTable.fileName = tableCatalogName + fileSuffix;
-    Table columnTable;
-    columnTable.tableId = getNextIndex();
-    columnTable.tableName = columnCatalogName;
-    columnTable.fileName = columnCatalogName + fileSuffix;
+    Table *tableTable = new Table(getNextIndex(), tableCatalogName, tableCatalogName + fileSuffix);
+    Table *columnTable = new Table(getNextIndex(), columnCatalogName, columnCatalogName + fileSuffix);
 
     addTableToCatalog(tableTable, tableCatalogAttributes);
     addTableToCatalog(columnTable, columnCatalogAttributes);
@@ -136,7 +130,7 @@ RC RelationManager::createCatalog()
 
 Table *RelationManager::getTableFromCatalog(const string &tableName, RID &rid)
 {
-    Table *returnTable = {.tableId = -1, .tableName = "", .fileName = ""};
+    Table *returnTable = new Table();
 
     RM_ScanIterator tableCatalogIterator;
     vector<string> attrList;
@@ -184,10 +178,10 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
         return result; //propogate error
 
     //TODO: Get next tableId
-    Table newTable;
-    newTable.tableId = getNextIndex();
-    newTable.tableName = tableName;
-    newTable.fileName = tableName + fileSuffix;
+    Table *newTable = new Table();
+    newTable->tableId = getNextIndex();
+    newTable->tableName = tableName;
+    newTable->fileName = tableName + fileSuffix;
     addTableToCatalog(newTable, attrs);
 
     return SUCCESS;
@@ -227,9 +221,9 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
     Table *table = getTableFromCatalog(tableName, temp);
     if (table == nullptr)
     {
-        return
+        return TABLE_DNE;
     }
-    table->fileName;
+    table->fileName = tableName;
     vector<string> columnAttributeNames;
     for (Attribute attr : columnCatalogAttributes)
     {
@@ -238,7 +232,7 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
     RM_ScanIterator rmi;
     scan(tableName, "table-id", CompOp::EQ_OP, &table->tableId, columnAttributeNames, rmi);
     RID rid;
-    void *data;
+    void *data = malloc(PAGE_SIZE);
     while (rmi.getNextTuple(rid, data) != RM_EOF)
     {
         Attribute toAdd;
@@ -261,25 +255,26 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
         toAdd.length = length;
         attrs.push_back(toAdd);
     }
+    free(data);
     if (attrs.empty())
         return -1;
     return SUCCESS;
 }
 
 RC RelationManager::insertTuple(const string &tableName, const void *data, RID &rid)
-{    
+{
     // Create a table object to check if the table exists and to get the file name
     RID temp;
     Table *table = getTableFromCatalog(tableName, temp);
-    if (table == nullptr) 
+    if (table == nullptr)
         return TABLE_DNE;
-    
+
     FileHandle fileHandle;
     RC result = _rbfm->openFile(table->fileName, fileHandle);
-    if (result != SUCCESS) 
+    if (result != SUCCESS)
         return result;
 
-    vector<Attribute> attributes; 
+    vector<Attribute> attributes;
     result = getAttributes(tableName, attributes);
     if (result != SUCCESS)
         return result;
@@ -303,15 +298,15 @@ RC RelationManager::readTuple(const string &tableName, const RID &rid, void *dat
     // Create a table object to check if the table exists and to get the file name
     RID temp;
     Table *table = getTableFromCatalog(tableName, temp);
-    if (table == nullptr) 
+    if (table == nullptr)
         return TABLE_DNE;
-    
+
     FileHandle fileHandle;
     RC result = _rbfm->openFile(table->fileName, fileHandle);
-    if (result != SUCCESS) 
+    if (result != SUCCESS)
         return result;
 
-    vector<Attribute> attributes; 
+    vector<Attribute> attributes;
     result = getAttributes(tableName, attributes);
     if (result != SUCCESS)
         return result;

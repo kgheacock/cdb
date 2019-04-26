@@ -28,6 +28,7 @@ public:
 
 class Table
 {
+public:
   Table(int tableId, string tableName, string fileName) : tableId(tableId), tableName(tableName), fileName(fileName){};
   Table() : Table(-1, "", ""){};
   int tableId;
@@ -89,7 +90,7 @@ private:
   int getNextIndex();
   vector<Attribute> tableCatalogAttributes;
   vector<Attribute> columnCatalogAttributes;
-  void addTableToCatalog(Table table, const vector<Attribute> &attrs);
+  void addTableToCatalog(Table *table, const vector<Attribute> &attrs);
   void addColumnsToCatalog(const vector<Attribute> &attrs, int tableId);
   Table *getTableFromCatalog(const string &tableName, RID &rid);
 };
