@@ -26,8 +26,10 @@ public:
   RC close() { return -1; };
 };
 
-struct Table
+class Table
 {
+  Table(int tableId, string tableName, string fileName) : tableId(tableId), tableName(tableName), fileName(fileName){};
+  Table() : Table(-1, "", ""){};
   int tableId;
   string tableName;
   string fileName;

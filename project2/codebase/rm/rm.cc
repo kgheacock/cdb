@@ -136,7 +136,7 @@ RC RelationManager::createCatalog()
 
 Table *RelationManager::getTableFromCatalog(const string &tableName, RID &rid)
 {
-    Table *returnTable;
+    Table *returnTable = {.tableId = -1, .tableName = "", .fileName = ""};
 
     RM_ScanIterator tableCatalogIterator;
     vector<string> attrList;
@@ -223,16 +223,20 @@ RC RelationManager::deleteTable(const string &tableName)
 
 RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &attrs)
 {
-    /*
     RID temp;
-    Table table = getTableFromCatalog(tableName, temp);
+    Table *table = getTableFromCatalog(tableName, temp);
+    if (table == nullptr)
+    {
+        return
+    }
+    table->fileName;
     vector<string> columnAttributeNames;
     for (Attribute attr : columnCatalogAttributes)
     {
         columnAttributeNames.push_back(attr.name);
     }
     RM_ScanIterator rmi;
-    scan(tableName, "table-id", CompOp::EQ_OP, &table.tableId, columnAttributeNames, rmi);
+    scan(tableName, "table-id", CompOp::EQ_OP, &table->tableId, columnAttributeNames, rmi);
     RID rid;
     void *data;
     while (rmi.getNextTuple(rid, data) != RM_EOF)
@@ -257,7 +261,6 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
         toAdd.length = length;
         attrs.push_back(toAdd);
     }
-    */
     if (attrs.empty())
         return -1;
     return SUCCESS;
