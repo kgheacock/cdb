@@ -195,8 +195,8 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
 RC RelationManager::deleteTable(const string &tableName)
 {
     RID rid;
-    Table table = getTableFromCatalog(tableName, rid);
-    int tableId = table.tableId;
+    Table *table = getTableFromCatalog(tableName, rid);
+    int tableId = table->tableId;
     if (tableId < 0)
         return -1;
     FileHandle tableCatalogFile;
