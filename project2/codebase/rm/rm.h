@@ -87,7 +87,7 @@ private:
   vector<Attribute> columnCatalogAttributes;
   void addTableToCatalog(Table table, const vector<Attribute> &attrs);
   void addColumnsToCatalog(const vector<Attribute> &attrs, int tableId);
-  Table getTableFromCatalog(const string &tableName, RID &rid);
+  Table *getTableFromCatalog(const string &tableName, RID &rid);
 };
 
 #endif
