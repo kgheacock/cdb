@@ -92,7 +92,7 @@ RC RelationManager::createCatalog()
         return result; //propogate error
 
     //Prepare column attribute list
-    columnCatalogAttributes.empty();
+    columnCatalogAttributes.clear();
     Attribute tableId = {.name = "table-id", .type = TypeInt, .length = sizeof(uint32_t)};
     Attribute columnName = {.name = "column-name", .type = TypeVarChar, .length = 50};
     Attribute columnType = {.name = "column-type", .type = TypeInt, .length = sizeof(uint32_t)};
@@ -104,7 +104,7 @@ RC RelationManager::createCatalog()
     columnCatalogAttributes.push_back(columnLength);
     columnCatalogAttributes.push_back(columnPos);
     //Prepare table attribute list
-    tableCatalogAttributes.empty();
+    tableCatalogAttributes.clear();
     Attribute tableName = {.name = "table-name", .type = TypeVarChar, .length = 50};
     Attribute fileName = {.name = "file-name", .type = TypeVarChar, .length = 50};
     tableCatalogAttributes.push_back(tableId);
@@ -146,8 +146,8 @@ int RelationManager::getTableId(const string &tableName, RID &rid)
 
 RC RelationManager::deleteCatalog()
 {
-    tableCatalogAttributes.empty();
-    columnCatalogAttributes.empty();
+    tableCatalogAttributes.clear();
+    columnCatalogAttributes.clear();
     _rbfm->destroyFile(tableCatalogName + fileSuffix);
     _rbfm->destroyFile(columnCatalogName + fileSuffix);
     return -1;
