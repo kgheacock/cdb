@@ -177,7 +177,6 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
     if (result != SUCCESS)
         return result; //propogate error
 
-    //TODO: Get next tableId
     Table *newTable = new Table();
     newTable->tableId = getNextIndex();
     newTable->tableName = tableName;
@@ -189,6 +188,7 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
 
 RC RelationManager::deleteTable(const string &tableName)
 {
+    //TODO check to make sure column and table catalog aren't being deleted
     RID rid;
     Table *table = getTableFromCatalog(tableName, rid);
     int tableId = table->tableId;
@@ -288,15 +288,15 @@ RC RelationManager::deleteTuple(const string &tableName, const RID &rid)
     // Create a table object to check if the table exists and to get the file name
     RID temp;
     Table *table = getTableFromCatalog(tableName, temp);
-    if (table == nullptr) 
+    if (table == nullptr)
         return TABLE_DNE;
-    
+
     FileHandle fileHandle;
     RC result = _rbfm->openFile(table->fileName, fileHandle);
-    if (result != SUCCESS) 
+    if (result != SUCCESS)
         return result;
 
-    vector<Attribute> attributes; 
+    vector<Attribute> attributes;
     result = getAttributes(tableName, attributes);
     if (result != SUCCESS)
         return result;
@@ -310,15 +310,15 @@ RC RelationManager::updateTuple(const string &tableName, const void *data, const
     // Create a table object to check if the table exists and to get the file name
     RID temp;
     Table *table = getTableFromCatalog(tableName, temp);
-    if (table == nullptr) 
+    if (table == nullptr)
         return TABLE_DNE;
-    
+
     FileHandle fileHandle;
     RC result = _rbfm->openFile(table->fileName, fileHandle);
-    if (result != SUCCESS) 
+    if (result != SUCCESS)
         return result;
 
-    vector<Attribute> attributes; 
+    vector<Attribute> attributes;
     result = getAttributes(tableName, attributes);
     if (result != SUCCESS)
         return result;
@@ -357,7 +357,16 @@ RC RelationManager::printTuple(const vector<Attribute> &attrs, const void *data)
 
 RC RelationManager::readAttribute(const string &tableName, const RID &rid, const string &attributeName, void *data)
 {
-    return -1;
+    RID temp;
+    vector<Attribute> attrs;
+    getAttributes(tableName, attrs);
+    Table *table = getTableFromCatalog(tableName, temp);
+    if (table == nullptr)
+        return TABLE_DNE;
+    FileHandle tableFile;
+    _rbfm->openFile(table->fileName, tableFile);
+    RC result = _rbfm->readAttribute(tableFile, attrs, rid, attributeName, data);
+    return result;
 }
 
 RC RelationManager::scan(const string &tableName,
