@@ -285,12 +285,46 @@ RC RelationManager::insertTuple(const string &tableName, const void *data, RID &
 
 RC RelationManager::deleteTuple(const string &tableName, const RID &rid)
 {
-    return -1;
+    // Create a table object to check if the table exists and to get the file name
+    RID temp;
+    Table *table = getTableFromCatalog(tableName, temp);
+    if (table == nullptr) 
+        return TABLE_DNE;
+    
+    FileHandle fileHandle;
+    RC result = _rbfm->openFile(table->fileName, fileHandle);
+    if (result != SUCCESS) 
+        return result;
+
+    vector<Attribute> attributes; 
+    result = getAttributes(tableName, attributes);
+    if (result != SUCCESS)
+        return result;
+
+    result = _rbfm->deleteRecord(fileHandle, attributes, rid);
+    return result;
 }
 
 RC RelationManager::updateTuple(const string &tableName, const void *data, const RID &rid)
 {
-    return -1;
+    // Create a table object to check if the table exists and to get the file name
+    RID temp;
+    Table *table = getTableFromCatalog(tableName, temp);
+    if (table == nullptr) 
+        return TABLE_DNE;
+    
+    FileHandle fileHandle;
+    RC result = _rbfm->openFile(table->fileName, fileHandle);
+    if (result != SUCCESS) 
+        return result;
+
+    vector<Attribute> attributes; 
+    result = getAttributes(tableName, attributes);
+    if (result != SUCCESS)
+        return result;
+
+    result = _rbfm->updateRecord(fileHandle, attributes, data, rid);
+    return result;
 }
 
 RC RelationManager::readTuple(const string &tableName, const RID &rid, void *data)
