@@ -263,9 +263,19 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
 }
 
 RC RelationManager::insertTuple(const string &tableName, const void *data, RID &rid)
-{
+{   // Todo - does table exist? Get filename from table object
+    FileHandle fileHandle;
+    RC result = _rbfm->openFile(tableName + fileSuffix, fileHandle);
+    if (result != SUCCESS) 
+        return result;
 
-    return -1;
+    vector<Attribute> attributes; 
+    result = getAttributes(tableName, attributes);
+    if (result != SUCCESS)
+        return result;
+
+    result = _rbfm->insertRecord(fileHandle, attributes, data, rid);
+    return result;
 }
 
 RC RelationManager::deleteTuple(const string &tableName, const RID &rid)
@@ -279,13 +289,26 @@ RC RelationManager::updateTuple(const string &tableName, const void *data, const
 }
 
 RC RelationManager::readTuple(const string &tableName, const RID &rid, void *data)
-{
+{   // Todo - does table exist? Get filename from table object
+    FileHandle fileHandle;
+    RC result = _rbfm->openFile(tableName + fileSuffix, fileHandle);
+    if (result != SUCCESS) 
+        return result;
+
+    vector<Attribute> attributes; 
+    result = getAttributes(tableName, attributes);
+    if (result != SUCCESS)
+        return result;
+
+    result = _rbfm->readRecord(fileHandle, attributes, rid, data);
+    return result;
     return -1;
 }
 
 RC RelationManager::printTuple(const vector<Attribute> &attrs, const void *data)
 {
-    return -1;
+    RC result = _rbfm->printRecord(attrs, data);
+    return result;
 }
 
 RC RelationManager::readAttribute(const string &tableName, const RID &rid, const string &attributeName, void *data)
