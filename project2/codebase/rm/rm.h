@@ -81,11 +81,13 @@ private:
   const string tableCatalogName = "Tables";
   const string columnCatalogName = "Columns";
   const string fileSuffix = ".t";
+  int tableIndex;
+  int getNextIndex();
   vector<Attribute> tableCatalogAttributes;
   vector<Attribute> columnCatalogAttributes;
   void addTableToCatalog(Table table, const vector<Attribute> &attrs);
   void addColumnsToCatalog(const vector<Attribute> &attrs, int tableId);
-  int getTableId(const string &tableName, RID &rid);
+  Table getTableFromCatalog(const string &tableName, RID &rid);
 };
 
 #endif

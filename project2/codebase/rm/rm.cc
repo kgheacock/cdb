@@ -9,8 +9,15 @@ RelationManager *RelationManager::instance()
     {
         _rm = new RelationManager();
         _rbfm = RecordBasedFileManager::instance();
+        _rm->tableIndex = 0;
     }
     return _rm;
+}
+
+int RelationManager::getNextIndex()
+{
+    ++tableIndex;
+    return tableIndex;
 }
 
 RelationManager::RelationManager()
@@ -113,11 +120,11 @@ RC RelationManager::createCatalog()
 
     //Create table objects
     Table tableTable;
-    tableTable.tableId = 1;
+    tableTable.tableId = getNextIndex();
     tableTable.tableName = tableCatalogName;
     tableTable.fileName = tableCatalogName + fileSuffix;
     Table columnTable;
-    columnTable.tableId = 2;
+    columnTable.tableId = getNextIndex();
     columnTable.tableName = columnCatalogName;
     columnTable.fileName = columnCatalogName + fileSuffix;
 
@@ -127,21 +134,37 @@ RC RelationManager::createCatalog()
     return SUCCESS;
 }
 
-int RelationManager::getTableId(const string &tableName, RID &rid)
+Table RelationManager::getTableFromCatalog(const string &tableName, RID &rid)
 {
+    Table returnTable;
 
     RM_ScanIterator tableCatalogIterator;
     vector<string> attrList;
     attrList.push_back("table-id");
+    attrList.push_back("file-name");
     scan(tableCatalogName, "table-name", CompOp::EQ_OP, &tableName, attrList, tableCatalogIterator);
-    int tableId;
-    if (tableCatalogIterator.getNextTuple(rid, (void *)&tableId) == RM_EOF)
+    void *data;
+    if (tableCatalogIterator.getNextTuple(rid, data) == RM_EOF)
     {
         tableCatalogIterator.close();
-        return -1;
+        return returnTable;
     }
     tableCatalogIterator.close();
-    return tableId;
+    int tableId = 0;
+    int offset = 0;
+    int sizeOfFileName = 0;
+    memcpy(&tableId, data, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+    memcpy(&sizeOfFileName, (char *)data + offset, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+    char fileName[sizeOfFileName + 1];
+    memcpy(&fileName, (char *)data + offset, sizeOfFileName);
+    fileName[sizeOfFileName] = '\0';
+    returnTable.fileName = fileName;
+    returnTable.tableId = tableId;
+    returnTable.tableName = tableName;
+
+    return returnTable;
 }
 
 RC RelationManager::deleteCatalog()
@@ -161,7 +184,7 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
 
     //TODO: Get next tableId
     Table newTable;
-    newTable.tableId = 0;
+    newTable.tableId = getNextIndex();
     newTable.tableName = tableName;
     newTable.fileName = tableName + fileSuffix;
     addTableToCatalog(newTable, attrs);
@@ -172,7 +195,8 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
 RC RelationManager::deleteTable(const string &tableName)
 {
     RID rid;
-    int tableId = getTableId(tableName, rid);
+    Table table = getTableFromCatalog(tableName, rid);
+    int tableId = table.tableId;
     if (tableId < 0)
         return -1;
     FileHandle tableCatalogFile;
@@ -198,7 +222,44 @@ RC RelationManager::deleteTable(const string &tableName)
 
 RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &attrs)
 {
-    return -1;
+    /*
+    RID temp;
+    Table table = getTableFromCatalog(tableName, temp);
+    vector<string> columnAttributeNames;
+    for (Attribute attr : columnCatalogAttributes)
+    {
+        columnAttributeNames.push_back(attr.name);
+    }
+    RM_ScanIterator rmi;
+    scan(tableName, "table-id", CompOp::EQ_OP, &table.tableId, columnAttributeNames, rmi);
+    RID rid;
+    void *data;
+    while (rmi.getNextTuple(rid, data) != RM_EOF)
+    {
+        Attribute toAdd;
+        int offset = 0;
+        //skip table-id and
+        offset += sizeof(uint32_t);
+        int attrNameLength = 0;
+        memcpy(&attrNameLength, (char *)data + offset, sizeof(uint32_t));
+        offset += sizeof(uint32_t);
+        char attrName[attrNameLength];
+        memcpy(&attrName, data, attrNameLength);
+        offset += attrNameLength;
+        toAdd.name = attrName;
+        int type = 0;
+        memcpy(&type, data, sizeof(uint32_t));
+        offset += sizeof(uint32_t);
+        toAdd.type = (AttrType)type;
+        int length = 0;
+        memcpy(&length, data, sizeof(uint32_t));
+        toAdd.length = length;
+        attrs.push_back(toAdd);
+    }
+    */
+    if (attrs.empty())
+        return -1;
+    return SUCCESS;
 }
 
 RC RelationManager::insertTuple(const string &tableName, const void *data, RID &rid)
