@@ -1702,6 +1702,8 @@ namespace RBFTest_15
 
     namespace ManyPages
     {
+
+
         int nonconsecutive(RecordBasedFileManager *rbfm)
         {
             // Fill the first page for a file with records X.
@@ -1738,13 +1740,20 @@ namespace RBFTest_15
                 prevRID = currRID;
                 rc = rbfm->insertRecord(fileHandle, recordDescriptor_X, record_X, currRID);
                 assert(rc == SUCCESS && "Insert record should not fail.");
+                cout << "Just inserted record: "; currRID.print(); cout << endl;
+                rbfm->printHeaderAndAllRecordEntries(fileHandle);
             }
-
             // Update the last two Xs to be Ys.
             rc = rbfm->updateRecord(fileHandle, recordDescriptor_Y, record_Y, prevRID); // On initial page.
             assert(rc == SUCCESS && "Update record should not fail.");
             rc = rbfm->updateRecord(fileHandle, recordDescriptor_Y, record_Y, currRID); // On another page.
             assert(rc == SUCCESS && "Update record should not fail.");
+
+            cout << "Just updated records:" << endl;
+            cout << "prevRID: "; prevRID.print(); cout << endl;
+            cout << "currRID: "; currRID.print(); cout << endl;
+
+            rbfm->printHeaderAndAllRecordEntries(fileHandle);
 
             // Setup scan parameters.  Project a single attribute.
             string targetAttrName = recordDescriptor_Y.back().name; // The real attribute.

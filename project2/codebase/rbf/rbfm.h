@@ -159,6 +159,8 @@ IMPORTANT, PLEASE READ: All methods below this comment (other than the construct
       const vector<string> &attributeNames, // a list of projected attributes
       RBFM_ScanIterator &rbfm_ScanIterator);
 
+  void printHeaderAndAllRecordEntries(FileHandle &fileHandle);
+
 public:
   friend class RBFM_ScanIterator;
 
@@ -191,6 +193,7 @@ private:
   void getRecordAtOffset(void *record, unsigned offset, const vector<Attribute> &recordDescriptor, void *data);
 
   int32_t findEmptySlot(void *pageData);
+
 };
 
 void markSlotAsTerminal(SlotDirectoryRecordEntry &recordEntry); // Slot is no longer forwarding.
@@ -251,5 +254,6 @@ private:
                    const vector<string> projectedAttributeNames);
 
 };
+
 
 #endif

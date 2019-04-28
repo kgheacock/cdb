@@ -1077,3 +1077,19 @@ SlotDirectoryRecordEntry getRecordEntry(const RID rid)
     return recordEntry;
 }
 
+void RecordBasedFileManager::printHeaderAndAllRecordEntries(FileHandle &fileHandle)
+{
+    for (unsigned int page_i = 0; page_i < fileHandle.getNumberOfPages(); page_i++)
+    {
+        void *page = malloc(PAGE_SIZE);
+        fileHandle.readPage(page_i, page);
+        SlotDirectoryHeader header = getSlotDirectoryHeader(page);
+        cout << "header = {freeSpaceOffset: " << header.freeSpaceOffset << ", recordEntriesNumber: " << header.recordEntriesNumber << "}" << endl;
+        for (unsigned int slot_j = 0; slot_j < header.recordEntriesNumber; slot_j++)
+        {
+            SlotDirectoryRecordEntry entry = getSlotDirectoryRecordEntry(page, slot_j);
+            cout << "    entry = {length: " << entry.length << ", offset: " << entry.offset << "}" << endl;
+        }
+        cout << endl;
+    }
+}
