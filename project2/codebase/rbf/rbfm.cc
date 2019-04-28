@@ -25,6 +25,76 @@ size_t RIDHasher::operator()(const RID rid) const
     return hash<unsigned>{}(rid.pageNum ^ rid.slotNum);
 }
 
+bool evalCompOp(void *x, void *y, CompOp op, AttrType attrType)
+{
+    int ix, iy;
+    float fx, fy;
+    string sx, sy;
+    int cmp;
+
+    bool x_LT_y;
+    bool x_EQ_y;
+    bool x_GT_y;
+
+    switch (attrType)
+    {
+        case TypeInt:
+            ix = *(int *) x;
+            iy = *(int *) y;
+
+            x_LT_y = ix <  iy;
+            x_EQ_y = ix == iy;
+            x_GT_y = ix >  iy;
+            break;
+
+        case TypeReal:
+            fx = *(float *) x;
+            fy = *(float *) y;
+
+            x_LT_y = fx <  fy;
+            x_EQ_y = fx == fy;
+            x_GT_y = fx >  fy;
+            break;
+
+        case TypeVarChar:
+            sx = string {(char *) x};
+            sy = string {(char *) y};
+
+            cmp = sx.compare(sy);
+
+            x_LT_y = cmp <  0;
+            x_EQ_y = cmp == 0;
+            x_GT_y = cmp > 0;
+            break;
+
+        default:
+            return false;
+    }
+
+    switch (op)
+    {
+        case EQ_OP:
+            return x_EQ_y;
+        case LT_OP:
+            return x_LT_y;
+        case LE_OP:
+            return x_LT_y || x_EQ_y;
+        case GT_OP:
+            return x_GT_y;
+        case GE_OP:
+            return x_GT_y || x_EQ_y;
+        case NE_OP:
+            return !x_EQ_y;
+        case NO_OP:
+            return true;
+
+        default:
+            return false;
+    }
+}
+
+
+RecordBasedFileManager* RBFM_ScanIterator::rbfm_ = NULL;
 RecordBasedFileManager* RecordBasedFileManager::_rbf_manager = NULL;
 PagedFileManager *RecordBasedFileManager::_pf_manager = NULL;
 
@@ -189,7 +259,6 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
         return RBFM_SLOT_DN_EXIST;
     }
 
-    // TODO: test reading record from forwarded slot.
     if (isSlotForwarding(recordEntry))
     {
         free(pageData);
@@ -365,6 +434,13 @@ bool RecordBasedFileManager::fieldIsNull(char *nullIndicator, int i)
     int indicatorIndex = i / CHAR_BIT;
     int indicatorMask  = 1 << (CHAR_BIT - 1 - (i % CHAR_BIT));
     return (nullIndicator[indicatorIndex] & indicatorMask) != 0;
+}
+
+void RecordBasedFileManager::setFieldToNull(char *nullIndicator, int i)
+{
+    int indicatorIndex = i / CHAR_BIT;
+    int indicatorMask  = 1 << (CHAR_BIT - 1 - (i % CHAR_BIT));
+    nullIndicator[indicatorIndex] |= indicatorMask;
 }
 
 // Computes the free space of a page (function of the free space pointer and the slot directory size).
@@ -638,6 +714,334 @@ int32_t RecordBasedFileManager::findEmptySlot(void *pageData)
         }
     }
     return -1;
+}
+
+RC RecordBasedFileManager::scan(
+    FileHandle &fileHandle,
+    const vector<Attribute> &recordDescriptor,
+    const string &conditionAttributeName,
+    const CompOp compOp,                  // comparision type such as "<" and "="
+    const void *value,                    // used in the comparison
+    const vector<string> &attributeNames, // a list of projected attributes (TODO: note the ORDER of projected attrs)
+    RBFM_ScanIterator &rbfm_ScanIterator)
+{
+    return rbfm_ScanIterator.load(instance(), fileHandle, recordDescriptor, conditionAttributeName, compOp, value, attributeNames);
+}
+
+// Like printRecord() but we ignore the values that are not of the target attribute.
+// This will allocate space on the heap for the value.
+RC RBFM_ScanIterator::getValueFromRecord(void *data, const vector<Attribute> recordDescriptor, const string targetAttrName, void * &value)
+{
+    // Parse the null indicator and save it into an array
+    int nullIndicatorSize = rbfm_->getNullIndicatorSize(recordDescriptor.size());
+    char nullIndicator[nullIndicatorSize];
+    memset(nullIndicator, 0, nullIndicatorSize);
+    memcpy(nullIndicator, data, nullIndicatorSize);
+    
+    // We've read in the null indicator, so we can skip past it now
+    unsigned offset = nullIndicatorSize;
+
+    for (unsigned i = 0; i < (unsigned) recordDescriptor.size(); i++)
+    {
+        // If the field is null, don't print it
+        bool isNull = rbfm_->fieldIsNull(nullIndicator, i);
+        if (isNull)
+        {
+            continue;
+        }
+
+        bool isTargetAttr = recordDescriptor[i].name.compare(targetAttrName) == 0;
+
+        switch (recordDescriptor[i].type)
+        {
+            case TypeInt:
+                uint32_t data_integer;
+                memcpy(&data_integer, ((char*) data + offset), INT_SIZE);
+                offset += INT_SIZE;
+
+                if (isTargetAttr)
+                {
+                    value = malloc(INT_SIZE);
+                    memcpy(value, &data_integer, INT_SIZE);
+                    return SUCCESS;
+                }
+                break;
+
+            case TypeReal:
+                float data_real;
+                memcpy(&data_real, ((char*) data + offset), REAL_SIZE);
+                offset += REAL_SIZE;
+
+                if (isTargetAttr)
+                {
+                    value = malloc(REAL_SIZE);
+                    memcpy(value, &data_real, REAL_SIZE);
+                    return SUCCESS;
+                }
+                break;
+
+            case TypeVarChar:
+                // First VARCHAR_LENGTH_SIZE bytes describe the varchar length
+                uint32_t varcharSize;
+                memcpy(&varcharSize, ((char*) data + offset), VARCHAR_LENGTH_SIZE);
+                offset += VARCHAR_LENGTH_SIZE;
+
+                // Gets the actual string.
+                char *data_string = (char*) malloc(varcharSize + 1);
+                if (data_string == NULL)
+                    return RBFM_MALLOC_FAILED;
+                memcpy(data_string, ((char*) data + offset), varcharSize);
+
+                // Adds the string terminator.
+                data_string[varcharSize] = '\0';
+                offset += varcharSize;
+
+                if (isTargetAttr)
+                {
+                    value = data_string;
+                    return SUCCESS;
+                }
+                free(data_string);
+                break;
+        }
+    }
+    return RBFM_SI_NO_VALUE_IN_RECORD;
+}
+
+// TODO: in-progress
+RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data)
+{
+    if (!paramsLoaded_)
+        return RBFM_SI_UNLOADED;
+    if (iteratorClosed_)
+        return RBFM_SI_CLOSED;
+
+    int rc;
+    if (!lastRIDInitialized_)
+    {
+        // Search for first matching record.
+        const uint32_t npages = fileHandle_.getNumberOfPages();
+        for (uint32_t page_i = 0; page_i < npages; page_i++)
+        {
+            void *pageData = calloc(PAGE_SIZE, sizeof(uint8_t));
+            if (pageData == NULL)
+                return RBFM_MALLOC_FAILED;
+            rc = fileHandle_.readPage(page_i, pageData);
+            if (rc != SUCCESS)
+                return rc;
+            SlotDirectoryHeader header = rbfm_->getSlotDirectoryHeader(pageData);
+
+            for (uint32_t slot_j = 0; slot_j < header.recordEntriesNumber; slot_j++)
+            {
+                SlotDirectoryRecordEntry entry = rbfm_->getSlotDirectoryRecordEntry(pageData, slot_j);
+
+                bool isSlotEmpty = entry.offset < 0;
+                bool recordNotInPage = isSlotForwarding(entry) || isSlotEmpty;
+                if (recordNotInPage)
+                    continue;
+
+                rid.pageNum = page_i;
+                rid.slotNum = slot_j;
+                vector<Attribute> recordDescriptor;
+                void *record = calloc(PAGE_SIZE, sizeof(uint8_t));
+                rc = rbfm_->readRecord(fileHandle_, recordDescriptor_, rid, record);
+                if (rc != SUCCESS)
+                    return rc;
+
+                void *value;
+                rc = getValueFromRecord(record, recordDescriptor_, conditionAttribute_.name, value);
+                if (rc != SUCCESS)
+                    return rc;
+                bool recordMatchesSearchCriteria = evalCompOp(value, value_, compOp_, conditionAttribute_.type);
+                free(value);
+
+                if (recordMatchesSearchCriteria)
+                {
+                    lastRID_.pageNum = page_i;
+                    lastRID_.slotNum = slot_j;
+                    lastRIDInitialized_ = true;
+
+                    int projectedSize;
+                    void *projectedRecord;
+                    vector<Attribute> projectedRecordDescriptor;
+                    rc = projectRecord(record, recordDescriptor_,
+                                       projectedRecord, projectedRecordDescriptor, projectedSize,
+                                       attributeNames_);
+
+                    memcpy(data, projectedRecord, projectedSize);
+
+                    free(record);
+                    free(pageData);
+                    return rc;
+                }
+                free(record);
+                free(pageData);
+            }
+            
+        }
+        // No matches found.
+        iteratorClosed_ = true;
+        return RBFM_EOF;
+    }
+
+    // TODO: getting many records:
+    // Otherwise we can start our scan at the new RID.
+    // This is the same process as above, but with our first page as lastRID.pageNum,
+    // and our starting slot as lastRID.slotNum + 1.
+    // If these are out of bounds of the records within the page, just move to lastRID.pageNum + 1.
+
+    return RBFM_EOF;
+}
+
+// TODO: Think about this some more.  Not sure what else we may need to do here.
+RC RBFM_ScanIterator::close()
+{
+    iteratorClosed_ = true;
+    return SUCCESS;
+}
+
+RC RBFM_ScanIterator::load(
+    RecordBasedFileManager *rbfm,
+    FileHandle &fileHandle,
+    const vector<Attribute> recordDescriptor,
+    const string conditionAttributeName,
+    const CompOp compOp,                  // comparision type such as "<" and "="
+    const void *value,                    // used in the comparison
+    const vector<string> attributeNames // a list of projected attributes
+)
+{
+    rbfm_ = rbfm->instance();
+    fileHandle_ = fileHandle;
+    recordDescriptor_ = recordDescriptor;
+    compOp_ = compOp;
+    value_ = const_cast<void *>(value);
+    attributeNames_ = attributeNames;
+
+    lastRIDInitialized_ = false;
+    paramsLoaded_ = true;
+    iteratorClosed_ = false;
+
+    for (size_t i = 0; i < recordDescriptor.size(); i++)
+    {
+        bool attrNamesMatch = recordDescriptor[i].name.compare(conditionAttributeName) == 0;
+        if (attrNamesMatch)
+        {
+            conditionAttribute_ = recordDescriptor[i];
+            return SUCCESS;
+        }
+    }
+
+    return -1;
+}
+
+RC RBFM_ScanIterator::projectRecord(const void *data_og, const vector<Attribute> recordDescriptor_og,
+                                    void * &data_pj, vector<Attribute> &recordDescriptor_pj, int &size_pj,
+                                    const vector<string> projectedAttributeNames)
+{
+    if (!paramsLoaded_)
+        return RBFM_SI_UNLOADED;
+
+    recordDescriptor_pj.clear();
+    data_pj = malloc(PAGE_SIZE);
+
+    // Parse the null indicator and save it into an array
+    int nullIndicatorSize_og = rbfm_->getNullIndicatorSize(recordDescriptor_og.size());
+    char nullIndicator_og[nullIndicatorSize_og];
+    memset(nullIndicator_og, 0, nullIndicatorSize_og);
+    memcpy(nullIndicator_og, data_og, nullIndicatorSize_og);
+
+    // Setup null indicator for projected record.
+    // Note: we still need to fill this in with null fields.
+    int nullIndicatorSize_pj = rbfm_->getNullIndicatorSize(projectedAttributeNames.size());
+    char nullIndicator_pj[nullIndicatorSize_pj];
+    memset(nullIndicator_pj, 0, nullIndicatorSize_pj);
+    
+    // We've read in the null indicator, so we can skip past it now
+    unsigned offset_og = nullIndicatorSize_og;
+    unsigned offset_pj = nullIndicatorSize_pj;
+    unsigned nullIndicatorField_pj = 0; // We'll build our projected nullIndicator as we go.
+
+    // For each original attribute, if it's a projected attribute, add it to the projected data.
+    for (unsigned i = 0; i < (unsigned) recordDescriptor_og.size(); i++)
+    {
+        // Check if this is something we should be projecting.
+        bool shouldProject = false;
+        for (auto attrName_pj : projectedAttributeNames)
+        {
+            bool attrNamesMatch = attrName_pj.compare(recordDescriptor_og[i].name) == 0;
+            if (attrNamesMatch)
+            {
+                shouldProject = true;
+                break;
+            }
+        }
+
+        if (shouldProject)
+        {
+            recordDescriptor_pj.push_back(recordDescriptor_og[i]);
+        }
+
+        bool isNull = rbfm_->fieldIsNull(nullIndicator_og, i);
+        if (isNull)
+        {
+            if (shouldProject)
+            {
+                rbfm_->setFieldToNull(nullIndicator_pj, nullIndicatorField_pj);
+                nullIndicatorField_pj++;
+            }
+            continue;
+        }
+        switch (recordDescriptor_og[i].type)
+        {
+            case TypeInt:
+                if (shouldProject)
+                {
+                    memcpy((char *) data_pj + offset_pj, (char *) data_og + offset_og, INT_SIZE);
+                    offset_pj += INT_SIZE;
+                }
+                offset_og += INT_SIZE;
+                break;
+
+            case TypeReal:
+                if (shouldProject)
+                {
+                    memcpy((char *) data_pj + offset_pj, (char *) data_og + offset_og, REAL_SIZE);
+                    offset_pj += REAL_SIZE;
+                }
+                offset_og += REAL_SIZE;
+                break;
+
+            case TypeVarChar:
+                // First VARCHAR_LENGTH_SIZE bytes describe the varchar length
+                uint32_t varcharSize;
+                memcpy(&varcharSize, (char*) data_og + offset_og, VARCHAR_LENGTH_SIZE);
+                if (shouldProject)
+                {
+                    memcpy((char *) data_pj + offset_pj, (char *) data_og + offset_og, VARCHAR_LENGTH_SIZE);
+                    offset_pj += VARCHAR_LENGTH_SIZE;
+                }
+                offset_og += VARCHAR_LENGTH_SIZE;
+
+                // Gets the actual string.
+                if (shouldProject)
+                {
+                    memcpy((char *) data_pj + offset_pj, (char*) data_og + offset_og, varcharSize);
+                    offset_pj += varcharSize;
+                }
+                offset_og += varcharSize;
+
+                break;
+        }
+    }
+
+    size_pj = offset_pj;
+
+    memcpy(data_pj, nullIndicator_pj, nullIndicatorSize_pj);
+
+    // Then ensure that each attribute we wanted to project has been hit.
+    // We may need to ensure that they are in the intended projected order (by order of the elements in vector).
+
+    return SUCCESS;
 }
 
 uint32_t getForwardingMask(const SlotDirectoryRecordEntry recordEntry) {

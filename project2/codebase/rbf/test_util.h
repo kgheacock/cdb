@@ -244,6 +244,89 @@ void prepareRecord_varchar2048(string varchar, vector<Attribute> &recordDescript
     *size = offset;
 }
 
+void createRecordDescriptor_int_varchar2048_real(vector<Attribute> &recordDescriptor)
+{
+    recordDescriptor.clear();
+
+    Attribute attr;
+    attr.name = "Int";
+    attr.type = TypeInt;
+    attr.length = (AttrLength)4;
+    recordDescriptor.push_back(attr);
+
+    attr.name = "Char";
+    attr.type = TypeVarChar;
+    attr.length = (AttrLength)2048;
+    recordDescriptor.push_back(attr);
+
+    attr.name = "Real";
+    attr.type = TypeReal;
+    attr.length = (AttrLength)4;
+    recordDescriptor.push_back(attr);
+}
+
+void prepareRecord_int_varchar2048_real(int intVal, string varchar, float realVal, vector<Attribute> &recordDescriptor, void *buffer, int *size)
+{
+    int offset = 0;
+    createRecordDescriptor_int_varchar2048_real(recordDescriptor);
+
+    // Null-indicators
+    int nullFieldsIndicatorActualSize = getActualByteForNullsIndicator(recordDescriptor.size());
+    void *nullFieldsIndicator = calloc(nullFieldsIndicatorActualSize, sizeof(uint8_t));
+    memcpy((char *)buffer + offset, nullFieldsIndicator, nullFieldsIndicatorActualSize);
+    free(nullFieldsIndicator);
+    offset += nullFieldsIndicatorActualSize;
+
+    // Write int value.
+    memcpy((char *)buffer + offset, &intVal, sizeof(int));
+    offset += sizeof(int);
+
+    // Write length of varchar.
+    const int nchars = varchar.size();
+    memcpy((char *)buffer + offset, &nchars, sizeof(int));
+    offset += sizeof(int);
+
+    // Write varchar value.
+    memcpy((char *)buffer + offset, varchar.c_str(), nchars);
+    offset += nchars;
+
+    // Write real value.
+    memcpy((char *)buffer + offset, &realVal, sizeof(float));
+    offset += sizeof(float);
+
+    *size = offset;
+}
+
+void createRecordDescriptor_real(vector<Attribute> &recordDescriptor)
+{
+    recordDescriptor.clear();
+
+    Attribute attr;
+    attr.name = "Real";
+    attr.type = TypeReal;
+    attr.length = (AttrLength)4;
+    recordDescriptor.push_back(attr);
+}
+
+void prepareRecord_real(float realVal, vector<Attribute> &recordDescriptor, void *buffer, int *size)
+{
+    int offset = 0;
+    createRecordDescriptor_real(recordDescriptor);
+
+    // Null-indicators
+    int nullFieldsIndicatorActualSize = getActualByteForNullsIndicator(recordDescriptor.size());
+    void *nullFieldsIndicator = calloc(nullFieldsIndicatorActualSize, sizeof(uint8_t));
+    memcpy((char *)buffer + offset, nullFieldsIndicator, nullFieldsIndicatorActualSize);
+    free(nullFieldsIndicator);
+    offset += nullFieldsIndicatorActualSize;
+
+    // Write real value.
+    memcpy((char *)buffer + offset, &realVal, sizeof(float));
+    offset += sizeof(float);
+
+    *size = offset;
+}
+
 void createLargeRecordDescriptor(vector<Attribute> &recordDescriptor)
 {
     char *suffix = (char *)malloc(10);
@@ -394,6 +477,49 @@ void *createUnforwardedPage(RecordBasedFileManager *rbfm, FileHandle &fileHandle
     assert(rc == SUCCESS && "Reading page should not fail.");
 
     free(nullsIndicator);
+    return pageData;
+}
+
+void *createUnforwardedPage_varchar2048(RecordBasedFileManager *rbfm, FileHandle &fileHandle, int &index, vector<Attribute> &recordDescriptor, vector<RID> &rids, vector<int> &sizes)
+{
+    createRecordDescriptor_varchar2048(recordDescriptor);
+
+    RID rid;
+    PageNum initialPageNum;
+    bool isFirstIteration = true;
+
+    // Insert just enough records to fill up one page.
+    while (true)
+    {
+        int size = 0;
+
+        void *record = calloc(PAGE_SIZE, sizeof(uint8_t));
+        prepareRecord_varchar2048("a", recordDescriptor, record, &size); 
+        auto rc = rbfm->insertRecord(fileHandle, recordDescriptor, record, rid);
+        free(record);
+
+        assert(rc == success && "Inserting a record should not fail.");
+
+        if (isFirstIteration)
+        {
+            initialPageNum = rid.pageNum;
+            isFirstIteration = false;
+        }
+        else if (initialPageNum != rid.pageNum)
+        {
+            rbfm->deleteRecord(fileHandle, recordDescriptor, rid);
+            break;
+        }
+
+        index++;
+        rids.push_back(rid);
+        sizes.push_back(size);
+    }
+
+    void *pageData = malloc(PAGE_SIZE);
+    auto rc = fileHandle.readPage(rids.front().pageNum, pageData);
+    assert(rc == SUCCESS && "Reading page should not fail.");
+
     return pageData;
 }
 

@@ -50,7 +50,7 @@ struct Attribute {
 };
 
 // Comparison Operator (NOT needed for part 1 of the project)
-typedef enum { EQ_OP = 0, // no condition// = 
+typedef enum { EQ_OP = 0, // = 
            LT_OP,      // <
            LE_OP,      // <=
            GT_OP,      // >
@@ -58,6 +58,10 @@ typedef enum { EQ_OP = 0, // no condition// =
            NE_OP,      // !=
            NO_OP	   // no condition
 } CompOp;
+
+bool evalCompOp(void *x, void *y, CompOp op);
+
+class RBFM_ScanIterator;
 
 // Slot directory headers for page organization
 // See chapter 9.6.2 of the cow book or lecture 3 slide 17 for more information
@@ -83,6 +87,9 @@ The scan iterator is NOT required to be implemented for the part 1 of the projec
 ********************************************************************************/
 
 # define RBFM_EOF (-1)  // end of a scan operator
+# define RBFM_SI_UNLOADED (-2)
+# define RBFM_SI_CLOSED (-3)
+# define RBFM_SI_NO_VALUE_IN_RECORD (-4)
 
 // RBFM_ScanIterator is an iterator to go through records
 // The way to use it is like the following:
@@ -93,17 +100,6 @@ The scan iterator is NOT required to be implemented for the part 1 of the projec
 //  }
 //  rbfmScanIterator.close();
 
-class RBFM_ScanIterator {
-public:
-  RBFM_ScanIterator() {};
-  ~RBFM_ScanIterator() {};
-
-  // Never keep the results in the memory. When getNextRecord() is called, 
-  // a satisfying record needs to be fetched from the file.
-  // "data" follows the same format as RecordBasedFileManager::insertRecord().
-  RC getNextRecord(RID &rid, void *data) { return RBFM_EOF; };
-  RC close() { return -1; };
-};
 
 
 class RecordBasedFileManager
@@ -157,13 +153,14 @@ IMPORTANT, PLEASE READ: All methods below this comment (other than the construct
   // Scan returns an iterator to allow the caller to go through the results one by one. 
   RC scan(FileHandle &fileHandle,
       const vector<Attribute> &recordDescriptor,
-      const string &conditionAttribute,
+      const string &conditionAttributeName,
       const CompOp compOp,                  // comparision type such as "<" and "="
       const void *value,                    // used in the comparison
       const vector<string> &attributeNames, // a list of projected attributes
       RBFM_ScanIterator &rbfm_ScanIterator);
 
 public:
+  friend class RBFM_ScanIterator;
 
 protected:
   RecordBasedFileManager();
@@ -188,6 +185,7 @@ private:
 
   int getNullIndicatorSize(int fieldCount);
   bool fieldIsNull(char *nullIndicator, int i);
+  void setFieldToNull(char *nullIndicator, int i);
 
   void setRecordAtOffset(void *page, unsigned offset, const vector<Attribute> &recordDescriptor, const void *data);
   void getRecordAtOffset(void *record, unsigned offset, const vector<Attribute> &recordDescriptor, void *data);
@@ -209,5 +207,49 @@ uint32_t getForwardingMask(const SlotDirectoryRecordEntry recordEntry);
  */
 RID getRID(const SlotDirectoryRecordEntry recordEntry);
 SlotDirectoryRecordEntry getRecordEntry(const RID rid);
+
+class RBFM_ScanIterator {
+public:
+
+  RBFM_ScanIterator() {};
+  ~RBFM_ScanIterator() {};
+
+  // Never keep the results in the memory. When getNextRecord() is called, 
+  // a satisfying record needs to be fetched from the file.
+  // "data" follows the same format as RecordBasedFileManager::insertRecord().
+  RC getNextRecord(RID &rid, void *data);
+  RC close();
+
+  RC load(
+        RecordBasedFileManager *rbfm,
+        FileHandle &fileHandle,
+        const vector<Attribute> recordDescriptor,
+        const string conditionAttributeName,
+        const CompOp compOp,                  // comparision type such as "<" and "="
+        const void *value,                    // used in the comparison
+        const vector<string> attributeNames // a list of projected attributes
+  );
+
+private: 
+
+  static RecordBasedFileManager *rbfm_;
+  FileHandle fileHandle_;
+  vector<Attribute> recordDescriptor_;
+  Attribute conditionAttribute_;
+  CompOp compOp_;
+  void *value_; // used in comparison
+  vector<string> attributeNames_; // project attributes
+  RID lastRID_; // RID of the most recent retrieved record from getNextRecord()
+  bool lastRIDInitialized_;
+  bool paramsLoaded_;
+  bool iteratorClosed_;
+
+  RC getValueFromRecord(void *data, const vector<Attribute> recordDescriptor, const string targetAttrName, void * &value);
+
+  RC projectRecord(const void *data_og, const vector<Attribute> recordDescriptor_og,
+                   void * &data_pj, vector<Attribute> &recordDescriptor_pj, int &size_pj,
+                   const vector<string> projectedAttributeNames);
+
+};
 
 #endif

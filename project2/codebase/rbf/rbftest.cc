@@ -1444,6 +1444,169 @@ namespace RBFTest_14
     }
 };
 
+namespace RBFTest_15
+{
+    string fileName = "test15";
+    FileHandle fileHandle;
+
+    void beforeEach(RecordBasedFileManager *rbfm)
+    {
+        remove(fileName.c_str());
+
+        // Create the file.
+        auto rc = rbfm->createFile(fileName);
+        assert(rc == success && "Creating the file should not fail.");
+
+        rc = createFileShouldSucceed(fileName);
+        assert(rc == success && "Creating the file failed.");
+
+        // Open the file.
+        rc = rbfm->openFile(fileName, fileHandle);
+        assert(rc == success && "Opening the file should not fail.");
+
+    }
+
+    void afterEach(RecordBasedFileManager *rbfm)
+    {
+        // Close the file.
+        auto rc = rbfm->closeFile(fileHandle);
+        assert(rc == success && "Closing the file should not fail.");
+        remove(fileName.c_str());
+    }
+
+    namespace SinglePage
+    {
+        namespace SingleRecord
+        {
+            int singleAttribute(RecordBasedFileManager *rbfm)
+            {
+                cout << "****In RBF Test Case 15 (single page, single record, single projected attribute) ****" << endl;
+                // Create an expected record (with that single project attribute).
+                // Compare.
+
+                // Load a single record on a single page.
+                int size;
+                vector<Attribute> recordDescriptor;
+                void *record = calloc(PAGE_SIZE, sizeof(uint8_t));
+                prepareRecord_int_varchar2048_real(12, "345", 6.789, recordDescriptor, record, &size);
+
+                RID rid;
+                auto rc = rbfm->insertRecord(fileHandle, recordDescriptor, record, rid);
+                assert(rc == SUCCESS && "Insert record should not fail.");
+
+                // Setup scan parameters.  Project a single attribute.
+                string targetAttrName = recordDescriptor.back().name; // The real attribute.
+                CompOp compOp = EQ_OP;
+                float compValue = 6.789;
+                vector<string> projectedAttrNames { targetAttrName };
+                RBFM_ScanIterator si;
+                rc = rbfm->scan(fileHandle, recordDescriptor, targetAttrName, compOp, (void *) (&compValue), projectedAttrNames, si);
+                assert(rc == SUCCESS && "Scan on single attribute should not fail.");
+
+                // Scan for a record.
+                RID nextRID;
+                void *nextRecord = calloc(PAGE_SIZE, sizeof(uint8_t));
+                rc = si.getNextRecord(nextRID, nextRecord);
+                assert (rc == SUCCESS && "getNextRecord() should not fail.");
+
+                // Create our expected record.
+                int expectedSize;
+                vector<Attribute> expectedRecordDescriptor;
+                void *expectedRecord = calloc(PAGE_SIZE, sizeof(uint8_t));
+                prepareRecord_real(compValue, expectedRecordDescriptor, expectedRecord, &expectedSize);
+
+                // Compare expected ==? actual.
+                const bool expected_eq_next = memcmp(nextRecord, expectedRecord, expectedSize) == 0 ? true : false;
+                assert(expected_eq_next && "nextRecord does not match what we expected.");
+                cout << "****RBF Test Case 15 Finished (single page, single record, single projected attribute)" << endl << endl;
+                return success;
+            }
+
+            int manyAttributes(RecordBasedFileManager *rbfm)
+            {
+                // Load a single record on a single page.
+                // Scan the file while projecting many attributes.
+                // Create an expected record (with those project attributes).
+                // Compare.
+                assert(false && "Scan on many attributes should not fail.");
+                return -1;
+            }
+        };
+
+        namespace ManyRecords
+        {
+            int consecutive(RecordBasedFileManager *rbfm)
+            {
+                // Insert two identical records (one attribute).
+                // Expect both records to be returned by scan (no filtering of attributes is necessary).
+                assert(false && "Scan with consecutive matches on a single page should not fail.");
+                return -1;
+            }
+
+            int nonconsecutive(RecordBasedFileManager *rbfm)
+            {
+                // Insert three records: r0, r1, r2.  Let r0 == r2, while r1 is different from both r0 and r2.
+                // i.e. Insert records X, Y, X.
+                // Expect both Xs to be returned by scan.  Also expect Y to not be returned by scan.
+                // (no filtering of attributes is necessary).
+                assert(false && "Scan with nonconsecutive matches on a single page should not fail.");
+                return -1;
+            }
+        };
+
+        int runAll(RecordBasedFileManager *rbfm)
+        {
+            vector<int (*)(RecordBasedFileManager *)> fs
+            {
+                SingleRecord::singleAttribute,
+                SingleRecord::manyAttributes,
+                ManyRecords::consecutive,
+                ManyRecords::nonconsecutive,
+            };
+
+            for (auto f : fs)
+            {
+                beforeEach(rbfm);
+                auto rc = f(rbfm);
+                assert(rc == success);
+                afterEach(rbfm);
+            }
+            return success;
+        }
+    };
+
+    namespace ManyPages
+    {
+        int nonconsecutive(RecordBasedFileManager *rbfm)
+        {
+            // Fill the first page for a file with records X.
+            // Update the last record in the page to be Y.
+            // Insert another record Y in the second page.
+            // Scan and expect both Ys to be returned.
+            assert(false && "Scan with nonconsecutive matches on many pages should not fail.");
+            return -1;
+        }
+
+        int runAll(RecordBasedFileManager *rbfm)
+        {
+            vector<int (*)(RecordBasedFileManager *)> fs
+            {
+                nonconsecutive,
+            };
+
+            for (auto f : fs)
+            {
+                beforeEach(rbfm);
+                auto rc = f(rbfm);
+                assert(rc == success);
+                afterEach(rbfm);
+            }
+            return success;
+        }
+        
+    };
+};
+
 int main()
 {
     // To test the functionality of the paged file manager
@@ -1489,6 +1652,9 @@ int main()
 
     RBFTest_14::Unforwarded::runAll(rbfm);
     RBFTest_14::Forwarded::runAll(rbfm);
+
+    RBFTest_15::SinglePage::runAll(rbfm);
+    RBFTest_15::ManyPages::runAll(rbfm);
 
     return 0;
 }
