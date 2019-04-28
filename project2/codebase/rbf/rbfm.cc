@@ -816,80 +816,73 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data)
     if (iteratorClosed_)
         return RBFM_SI_CLOSED;
 
+
+    // Search for first matching record.
     int rc;
-    if (!lastRIDInitialized_)
+    const uint32_t npages = fileHandle_.getNumberOfPages();
+    const uint32_t startingPage = lastRIDInitialized_ ? lastRID_.pageNum : 0;
+    for (uint32_t page_i = startingPage; page_i < npages; page_i++)
     {
-        // Search for first matching record.
-        const uint32_t npages = fileHandle_.getNumberOfPages();
-        for (uint32_t page_i = 0; page_i < npages; page_i++)
+        void *pageData = calloc(PAGE_SIZE, sizeof(uint8_t));
+        if (pageData == NULL)
+            return RBFM_MALLOC_FAILED;
+        rc = fileHandle_.readPage(page_i, pageData);
+        if (rc != SUCCESS)
+            return rc;
+        SlotDirectoryHeader header = rbfm_->getSlotDirectoryHeader(pageData);
+
+        const uint32_t startingSlot = lastRIDInitialized_ && page_i == lastRID_.pageNum ? lastRID_.slotNum + 1 : 0;
+        for (uint32_t slot_j = startingSlot; slot_j < header.recordEntriesNumber; slot_j++)
         {
-            void *pageData = calloc(PAGE_SIZE, sizeof(uint8_t));
-            if (pageData == NULL)
-                return RBFM_MALLOC_FAILED;
-            rc = fileHandle_.readPage(page_i, pageData);
+            SlotDirectoryRecordEntry entry = rbfm_->getSlotDirectoryRecordEntry(pageData, slot_j);
+
+            bool isSlotEmpty = entry.offset < 0;
+            bool recordNotInPage = isSlotForwarding(entry) || isSlotEmpty;
+            if (recordNotInPage)
+                continue;
+
+            rid.pageNum = page_i;
+            rid.slotNum = slot_j;
+            vector<Attribute> recordDescriptor;
+            void *record = calloc(PAGE_SIZE, sizeof(uint8_t));
+            rc = rbfm_->readRecord(fileHandle_, recordDescriptor_, rid, record);
             if (rc != SUCCESS)
                 return rc;
-            SlotDirectoryHeader header = rbfm_->getSlotDirectoryHeader(pageData);
 
-            for (uint32_t slot_j = 0; slot_j < header.recordEntriesNumber; slot_j++)
+            void *value;
+            rc = getValueFromRecord(record, recordDescriptor_, conditionAttribute_.name, value);
+            if (rc != SUCCESS)
+                return rc;
+            bool recordMatchesSearchCriteria = evalCompOp(value, value_, compOp_, conditionAttribute_.type);
+            free(value);
+
+            if (recordMatchesSearchCriteria)
             {
-                SlotDirectoryRecordEntry entry = rbfm_->getSlotDirectoryRecordEntry(pageData, slot_j);
+                lastRID_.pageNum = page_i;
+                lastRID_.slotNum = slot_j;
+                lastRIDInitialized_ = true;
 
-                bool isSlotEmpty = entry.offset < 0;
-                bool recordNotInPage = isSlotForwarding(entry) || isSlotEmpty;
-                if (recordNotInPage)
-                    continue;
+                int projectedSize;
+                void *projectedRecord;
+                vector<Attribute> projectedRecordDescriptor;
+                rc = projectRecord(record, recordDescriptor_,
+                                   projectedRecord, projectedRecordDescriptor, projectedSize,
+                                   attributeNames_);
 
-                rid.pageNum = page_i;
-                rid.slotNum = slot_j;
-                vector<Attribute> recordDescriptor;
-                void *record = calloc(PAGE_SIZE, sizeof(uint8_t));
-                rc = rbfm_->readRecord(fileHandle_, recordDescriptor_, rid, record);
-                if (rc != SUCCESS)
-                    return rc;
+                memcpy(data, projectedRecord, projectedSize);
 
-                void *value;
-                rc = getValueFromRecord(record, recordDescriptor_, conditionAttribute_.name, value);
-                if (rc != SUCCESS)
-                    return rc;
-                bool recordMatchesSearchCriteria = evalCompOp(value, value_, compOp_, conditionAttribute_.type);
-                free(value);
-
-                if (recordMatchesSearchCriteria)
-                {
-                    lastRID_.pageNum = page_i;
-                    lastRID_.slotNum = slot_j;
-                    lastRIDInitialized_ = true;
-
-                    int projectedSize;
-                    void *projectedRecord;
-                    vector<Attribute> projectedRecordDescriptor;
-                    rc = projectRecord(record, recordDescriptor_,
-                                       projectedRecord, projectedRecordDescriptor, projectedSize,
-                                       attributeNames_);
-
-                    memcpy(data, projectedRecord, projectedSize);
-
-                    free(record);
-                    free(pageData);
-                    return rc;
-                }
                 free(record);
                 free(pageData);
+                return rc;
             }
-            
+            free(record);
+            free(pageData);
         }
-        // No matches found.
-        iteratorClosed_ = true;
-        return RBFM_EOF;
+        
     }
 
-    // TODO: getting many records:
-    // Otherwise we can start our scan at the new RID.
-    // This is the same process as above, but with our first page as lastRID.pageNum,
-    // and our starting slot as lastRID.slotNum + 1.
-    // If these are out of bounds of the records within the page, just move to lastRID.pageNum + 1.
-
+    // No matches found.
+    iteratorClosed_ = true;
     return RBFM_EOF;
 }
 
