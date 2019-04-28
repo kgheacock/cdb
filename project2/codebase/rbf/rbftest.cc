@@ -1478,13 +1478,9 @@ namespace RBFTest_15
     {
         namespace SingleRecord
         {
-            int singleAttribute(RecordBasedFileManager *rbfm)
+            int test(RecordBasedFileManager *rbfm, vector<string> projectedAttrNames)
             {
-                cout << "****In RBF Test Case 15 (single page, single record, single projected attribute) ****" << endl;
-                // Create an expected record (with that single project attribute).
-                // Compare.
-
-                // Load a single record on a single page.
+                // Create record on page.
                 int size;
                 vector<Attribute> recordDescriptor;
                 void *record = calloc(PAGE_SIZE, sizeof(uint8_t));
@@ -1498,7 +1494,6 @@ namespace RBFTest_15
                 string targetAttrName = recordDescriptor.back().name; // The real attribute.
                 CompOp compOp = EQ_OP;
                 float compValue = 6.789;
-                vector<string> projectedAttrNames { targetAttrName };
                 RBFM_ScanIterator si;
                 rc = rbfm->scan(fileHandle, recordDescriptor, targetAttrName, compOp, (void *) (&compValue), projectedAttrNames, si);
                 assert(rc == SUCCESS && "Scan on single attribute should not fail.");
@@ -1518,18 +1513,27 @@ namespace RBFTest_15
                 // Compare expected ==? actual.
                 const bool expected_eq_next = memcmp(nextRecord, expectedRecord, expectedSize) == 0 ? true : false;
                 assert(expected_eq_next && "nextRecord does not match what we expected.");
+                return success;
+            }
+
+            int singleAttribute(RecordBasedFileManager *rbfm)
+            {
+                cout << "****In RBF Test Case 15 (single page, single record, single projected attribute) ****" << endl;
+                vector<string> projectedAttrNames { "Real" };
+                auto rc = test(rbfm, projectedAttrNames);
+                assert(rc == SUCCESS);
                 cout << "****RBF Test Case 15 Finished (single page, single record, single projected attribute)" << endl << endl;
                 return success;
             }
 
             int manyAttributes(RecordBasedFileManager *rbfm)
             {
-                // Load a single record on a single page.
-                // Scan the file while projecting many attributes.
-                // Create an expected record (with those project attributes).
-                // Compare.
-                assert(false && "Scan on many attributes should not fail.");
-                return -1;
+                cout << "****In RBF Test Case 15 (single page, single record, many projected attributes) ****" << endl;
+                vector<string> projectedAttrNames { "Real" };
+                auto rc = test(rbfm, projectedAttrNames);
+                assert(rc == SUCCESS);
+                cout << "****RBF Test Case 15 Finished (single page, single record, single projected attribute)" << endl << endl;
+                return success;
             }
         };
 
