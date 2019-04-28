@@ -876,8 +876,8 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data)
                 return rc;
             }
             free(record);
-            free(pageData);
         }
+        free(pageData);
         
     }
 
