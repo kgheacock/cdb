@@ -1522,7 +1522,7 @@ namespace RBFTest_15
                 vector<string> projectedAttrNames { "Real" };
                 auto rc = test(rbfm, projectedAttrNames);
                 assert(rc == SUCCESS);
-                cout << "****RBF Test Case 15 Finished (single page, single record, single projected attribute)" << endl << endl;
+                cout << "RBF Test Case 15 Finished (single page, single record, single projected attribute)" << endl << endl;
                 return success;
             }
 
@@ -1532,7 +1532,7 @@ namespace RBFTest_15
                 vector<string> projectedAttrNames { "Real" };
                 auto rc = test(rbfm, projectedAttrNames);
                 assert(rc == SUCCESS);
-                cout << "****RBF Test Case 15 Finished (single page, single record, single projected attribute)" << endl << endl;
+                cout << "RBF Test Case 15 Finished (single page, single record, single projected attribute)" << endl << endl;
                 return success;
             }
         };
@@ -1541,10 +1541,63 @@ namespace RBFTest_15
         {
             int consecutive(RecordBasedFileManager *rbfm)
             {
+                cout << "****In RBF Test Case 15 (single page, many records, consecutive) ****" << endl;
                 // Insert two identical records (one attribute).
                 // Expect both records to be returned by scan (no filtering of attributes is necessary).
-                assert(false && "Scan with consecutive matches on a single page should not fail.");
-                return -1;
+
+                // Create record on page.
+                int size;
+                vector<Attribute> recordDescriptor;
+                void *record = calloc(PAGE_SIZE, sizeof(uint8_t));
+                prepareRecord_int_varchar2048_real(12, "345", 6.789, recordDescriptor, record, &size);
+
+                RID rid;
+                auto rc = rbfm->insertRecord(fileHandle, recordDescriptor, record, rid);
+                assert(rc == SUCCESS && "Insert record should not fail.");
+
+                rc = rbfm->insertRecord(fileHandle, recordDescriptor, record, rid);
+                assert(rc == SUCCESS && "Insert record should not fail.");
+
+                // Setup scan parameters.  Project a single attribute.
+                string targetAttrName = recordDescriptor.back().name; // The real attribute.
+                CompOp compOp = EQ_OP;
+                float compValue = 6.789;
+                RBFM_ScanIterator si;
+                vector<string> projectedAttrNames { "Real" };
+                rc = rbfm->scan(fileHandle, recordDescriptor, targetAttrName, compOp, (void *) (&compValue), projectedAttrNames, si);
+                assert(rc == SUCCESS && "Scan on single attribute should not fail.");
+
+                // Scan for a record.
+                RID nextRID;
+                void *nextRecord = calloc(PAGE_SIZE, sizeof(uint8_t));
+                rc = si.getNextRecord(nextRID, nextRecord);
+                assert (rc == SUCCESS && "getNextRecord() should not fail.");
+
+                // Create our expected record.
+                int expectedSize;
+                vector<Attribute> expectedRecordDescriptor;
+                void *expectedRecord = calloc(PAGE_SIZE, sizeof(uint8_t));
+                prepareRecord_real(compValue, expectedRecordDescriptor, expectedRecord, &expectedSize);
+
+                // Compare expected ==? actual.
+                bool expected_eq_next = memcmp(nextRecord, expectedRecord, expectedSize) == 0 ? true : false;
+                assert(expected_eq_next && "nextRecord does not match what we expected.");
+
+                // Scan for a record.
+                nextRecord = calloc(PAGE_SIZE, sizeof(uint8_t));
+                rc = si.getNextRecord(nextRID, nextRecord);
+                assert (rc == SUCCESS && "getNextRecord() should not fail.");
+
+                // Create our expected record.
+                expectedRecord = calloc(PAGE_SIZE, sizeof(uint8_t));
+                prepareRecord_real(compValue, expectedRecordDescriptor, expectedRecord, &expectedSize);
+
+                // Compare expected ==? actual.
+                expected_eq_next = memcmp(nextRecord, expectedRecord, expectedSize) == 0 ? true : false;
+                assert(expected_eq_next && "nextRecord does not match what we expected.");
+
+                cout << "RBF Test Case 15 Finished (single page, many records, consecutive)" << endl << endl;
+                return success;
             }
 
             int nonconsecutive(RecordBasedFileManager *rbfm)
