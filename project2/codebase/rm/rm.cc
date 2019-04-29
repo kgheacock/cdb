@@ -119,8 +119,8 @@ RC RelationManager::createCatalog()
     tableCatalogAttributes.push_back(fileName);
 
     //Create table objects
-    Table *tableTable = new Table(getNextIndex(), tableCatalogName, tableCatalogName + fileSuffix);
-    Table *columnTable = new Table(getNextIndex(), columnCatalogName, columnCatalogName + fileSuffix);
+    tableTable = new Table(getNextIndex(), tableCatalogName, tableCatalogName + fileSuffix);
+    columnTable = new Table(getNextIndex(), columnCatalogName, columnCatalogName + fileSuffix);
 
     addTableToCatalog(tableTable, tableCatalogAttributes);
     addTableToCatalog(columnTable, columnCatalogAttributes);
@@ -132,13 +132,15 @@ Table *RelationManager::getTableFromCatalog(const string &tableName, RID &rid)
 {
     Table *returnTable = new Table();
 
-    RM_ScanIterator tableCatalogIterator;
+    RBFM_ScanIterator tableCatalogIterator;
     vector<string> attrList;
     attrList.push_back("table-id");
     attrList.push_back("file-name");
-    scan(tableCatalogName, "table-name", CompOp::EQ_OP, &tableName, attrList, tableCatalogIterator);
+    FileHandle tableCatalogFile;
+    _rbfm->openFile(tableTable->fileName, tableCatalogFile);
+    _rbfm->scan(tableCatalogFile, tableCatalogAttributes, "table-name", CompOp::EQ_OP, &tableName, attrList, tableCatalogIterator);
     void *data = malloc(PAGE_SIZE);
-    if (tableCatalogIterator.getNextTuple(rid, data) == RM_EOF)
+    if (tableCatalogIterator.getNextRecord(rid, data) == RBFM_EOF)
     {
         tableCatalogIterator.close();
         return nullptr;
@@ -157,6 +159,7 @@ Table *RelationManager::getTableFromCatalog(const string &tableName, RID &rid)
     returnTable->fileName = fileName;
     returnTable->tableId = tableId;
     returnTable->tableName = tableName;
+    _rbfm->closeFile(tableCatalogFile);
     free(data);
 
     return returnTable;
@@ -223,18 +226,21 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
     {
         return TABLE_DNE;
     }
-    table->fileName = tableName;
+    table->tableName = tableName;
     vector<string> columnAttributeNames;
     for (Attribute attr : columnCatalogAttributes)
     {
         columnAttributeNames.push_back(attr.name);
     }
-    RM_ScanIterator rmi;
-    scan(tableName, "table-id", CompOp::EQ_OP, &table->tableId, columnAttributeNames, rmi);
+    RBFM_ScanIterator rbfmi;
+    FileHandle columnCatalogFile;
+    _rbfm->openFile(columnTable->fileName, columnCatalogFile);
+    _rbfm->scan(columnCatalogFile, columnCatalogAttributes, "table-id", CompOp::EQ_OP, &table->tableId, columnAttributeNames, rbfmi);
     RID rid;
     void *data = malloc(PAGE_SIZE);
-    while (rmi.getNextTuple(rid, data) != RM_EOF)
+    while (rbfmi.getNextRecord(rid, data) != RBFM_EOF)
     {
+        //TODO: check if data is in correct format
         Attribute toAdd;
         int offset = 0;
         //skip table-id and
@@ -255,6 +261,7 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
         toAdd.length = length;
         attrs.push_back(toAdd);
     }
+    _rbfm->closeFile(columnCatalogFile);
     free(data);
     if (attrs.empty())
         return -1;
@@ -263,6 +270,7 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
 
 RC RelationManager::insertTuple(const string &tableName, const void *data, RID &rid)
 {
+    //TODO: if column catalog contains a dropped column, insert a null flag into the record before storing
     // Create a table object to check if the table exists and to get the file name
     RID temp;
     Table *table = getTableFromCatalog(tableName, temp);
@@ -285,6 +293,7 @@ RC RelationManager::insertTuple(const string &tableName, const void *data, RID &
 
 RC RelationManager::deleteTuple(const string &tableName, const RID &rid)
 {
+
     // Create a table object to check if the table exists and to get the file name
     RID temp;
     Table *table = getTableFromCatalog(tableName, temp);
@@ -307,6 +316,7 @@ RC RelationManager::deleteTuple(const string &tableName, const RID &rid)
 
 RC RelationManager::updateTuple(const string &tableName, const void *data, const RID &rid)
 {
+    //TODO: if column catalog contains a dropped column, insert a null flag into the record before storing
     // Create a table object to check if the table exists and to get the file name
     RID temp;
     Table *table = getTableFromCatalog(tableName, temp);
@@ -329,6 +339,11 @@ RC RelationManager::updateTuple(const string &tableName, const void *data, const
 
 RC RelationManager::readTuple(const string &tableName, const RID &rid, void *data)
 {
+    //TODO: if there is a dropped column, it will show up as a nullField or DontCare value
+    //take out that data before returning
+    //TODO: if there are additional columns that don't appear in the record (because the column was added after the record was created)
+    //set the null flag corrisponding to that position
+
     // Create a table object to check if the table exists and to get the file name
     RID temp;
     Table *table = getTableFromCatalog(tableName, temp);
@@ -351,6 +366,10 @@ RC RelationManager::readTuple(const string &tableName, const RID &rid, void *dat
 
 RC RelationManager::printTuple(const vector<Attribute> &attrs, const void *data)
 {
+    //TODO: if there is a dropped column, it will show up as a nullField or DontCare value
+    //take out that data before returning
+    //TODO: if there are additional columns that don't appear in the record (because the column was added after the record was created)
+    //set the null flag corrisponding to that position
     RC result = _rbfm->printRecord(attrs, data);
     return result;
 }
@@ -376,5 +395,27 @@ RC RelationManager::scan(const string &tableName,
                          const vector<string> &attributeNames,
                          RM_ScanIterator &rm_ScanIterator)
 {
-    return -1;
+    RID temp;
+    Table *tableToScan = getTableFromCatalog(tableName, temp);
+    vector<Attribute> scannedTableAttributes;
+    RC result = getAttributes(tableName, scannedTableAttributes);
+    if (result != SUCCESS)
+        return result;
+    FileHandle tableToScanFile;
+    _rbfm->openFile(tableToScan->fileName, tableToScanFile);
+    RBFM_ScanIterator underlyingIterator;
+    result = _rbfm->scan(tableToScanFile, scannedTableAttributes, conditionAttribute, compOp, value, attributeNames, underlyingIterator);
+    if (result != SUCCESS)
+        return result;
+    RM_ScanIterator *returnIterator = new RM_ScanIterator(underlyingIterator);
+    rm_ScanIterator = *returnIterator;
+    return SUCCESS;
+}
+
+RC RM_ScanIterator::getNextTuple(RID &rid, void *data)
+{
+    RC result = underlyingIterator.getNextRecord(rid, data);
+    if (result == RBFM_EOF)
+        return RM_EOF;
+    return result;
 }

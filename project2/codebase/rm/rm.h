@@ -20,11 +20,15 @@ class RM_ScanIterator
 {
 public:
   RM_ScanIterator(){};
+  RM_ScanIterator(RBFM_ScanIterator ittr) : underlyingIterator(ittr){};
   ~RM_ScanIterator(){};
 
   // "data" follows the same format as RelationManager::insertTuple()
-  RC getNextTuple(RID &rid, void *data) { return RM_EOF; };
+  RC getNextTuple(RID &rid, void *data);
   RC close() { return -1; };
+
+private:
+  RBFM_ScanIterator underlyingIterator;
 };
 
 class Table
@@ -84,6 +88,8 @@ protected:
 private:
   static RelationManager *_rm;
   static RecordBasedFileManager *_rbfm;
+  Table *tableTable;
+  Table *columnTable;
   const string tableCatalogName = "Tables";
   const string columnCatalogName = "Columns";
   const string fileSuffix = ".t";
