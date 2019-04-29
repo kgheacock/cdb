@@ -1816,6 +1816,64 @@ namespace RBFTest_15
     };
 };
 
+int RBFTest_16(RecordBasedFileManager *rbfm)
+{
+    cout << "**** In RBF Test Case 16 ****" << endl;
+    string fileName { "test16" };
+    remove(fileName.c_str());
+
+    // Create the file.
+    auto rc = rbfm->createFile(fileName);
+    assert(rc == success && "Creating the file should not fail.");
+
+    rc = createFileShouldSucceed(fileName);
+    assert(rc == success && "Creating the file failed.");
+
+    // Open the file.
+    FileHandle fileHandle;
+    rc = rbfm->openFile(fileName, fileHandle);
+    assert(rc == success && "Opening the file should not fail.");
+
+    // Create record on page.
+    int size;
+    vector<Attribute> recordDescriptor;
+    void *record = calloc(PAGE_SIZE, sizeof(uint8_t));
+    prepareRecord_int_varchar2048_real(12, "345", 6.789, recordDescriptor, record, &size);
+
+    RID rid;
+    rc = rbfm->insertRecord(fileHandle, recordDescriptor, record, rid);
+    assert(rc == SUCCESS && "Insert record should not fail.");
+
+    // Setup scan parameters.  Project a single attribute.
+    string targetAttrName = recordDescriptor.back().name; // The real attribute.
+    CompOp compOp = EQ_OP;
+    float compValue = 6.789;
+    vector<string> projectedAttrNames = { "Real" };
+    RBFM_ScanIterator si;
+    rc = rbfm->scan(fileHandle, recordDescriptor, targetAttrName, compOp, (void *) (&compValue), projectedAttrNames, si);
+    assert(rc == SUCCESS && "Scan on single attribute should not fail.");
+
+    // Close iterator.
+    rc = si.close();
+    assert(rc == SUCCESS && "Closing a ScanIterator should not fail.");
+
+    // Scan for a record.
+    RID nextRID;
+    void *nextRecord = calloc(PAGE_SIZE, sizeof(uint8_t));
+    rc = si.getNextRecord(nextRID, nextRecord);
+    assert (rc == RBFM_SI_CLOSED && "Should not be able to get a record when a ScanIterator is closed.");
+
+    // Close the file.
+    rc = rbfm->closeFile(fileHandle);
+    assert(rc == success && "Closing the file should not fail.");
+    remove(fileName.c_str());
+    cout << "RBF Test Case 16 Finished" << endl << endl;
+
+    free(nextRecord);
+    free(record);
+    return success;
+}
+
 int main()
 {
     // To test the functionality of the paged file manager
@@ -1864,6 +1922,8 @@ int main()
 
     RBFTest_15::SinglePage::runAll(rbfm);
     RBFTest_15::ManyPages::runAll(rbfm);
+
+    RBFTest_16(rbfm);
 
     return 0;
 }
