@@ -166,16 +166,22 @@ RC RelationManager::deleteCatalog()
 {
     tableCatalogAttributes.clear();
     columnCatalogAttributes.clear();
-    _rbfm->destroyFile(tableCatalogName + fileSuffix);
-    _rbfm->destroyFile(columnCatalogName + fileSuffix);
-    return -1;
+    RC result = _rbfm->destroyFile(tableCatalogName + fileSuffix);
+    if (result != SUCCESS)
+        return result; // Propogate error
+    
+    result = _rbfm->destroyFile(columnCatalogName + fileSuffix);
+    if (result != SUCCESS)
+        return result;
+
+    return SUCCESS;
 }
 
 RC RelationManager::createTable(const string &tableName, const vector<Attribute> &attrs)
 {
     RC result = _rbfm->createFile(tableName + fileSuffix);
     if (result != SUCCESS)
-        return result; //propogate error
+        return result;
 
     Table *newTable = new Table();
     newTable->tableId = getNextIndex();

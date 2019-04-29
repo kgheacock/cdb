@@ -1,36 +1,49 @@
 1. Basic information
-Team Number : 
-Student ID# of Submitter:
-Name of Submitter: 
+Team Number : 8 
+Student ID# of Submitter: 1499743
+Name of Submitter: Michael Farrill
 ID#s and Names for others on the Team
-
+Allston Mickey, Keith Heacock
 
 2. Metadata
-- Show your metadata design (Tables and Columns table) and information about each column.
 
+TODO - Show your metadata design (Tables and Columns table) and information about each column.
 
 3. Internal Record Format
-- Show your record format design and describe how your design satisfies O(1) field access. If not, just mention that your team hasn't implemented this feature.
-- Describe how you store a VarChar field.
-- Describe how you deal with an update and delete.
 
+We used a variable-length record format with a directory and additionally, with null flags. The 
+directory is an array of field offsets. This allows direct access to each element (an offset) in 
+the array in constant time O(1).
+ 
+To store a VarChar field we are allocating memory based off the length of the string (if the field isn’t marked as null). Then to retrieve the VarChar field we calculate its length based off the offset of the next field. A record has the following format:
+[ numberOfFields | nullFlags | field1Offset….fieldNOffset| field1...fieldN].
+
+TODO - Describe how you deal with an update and delete.
 
 4. Page Format
-- Show your page format design.
-- Describe how you deal with an update and delete.
 
+Our Page format consists of variable length records (identified by record ids), packed free space, 
+a slot directory, the number of slots, and the free space offset. Rids contain a page id, indicating 
+on what page the record is located, and a slot #, indicating in which index its offset is located in 
+the slot directory. Free space is contiguous, making it easier to manage. The slot directory can be 
+increased in size, allocating free space and incrementing the slot count. The free space offset 
+indicates the beginning of free space, which is neccessary for record insertion and other essential 
+functions.  
+
+TODO - Describe how you deal with an update and delete.
 
 5. File Format
-- Show your file format design.
 
-
+TODO - Show your file format design.
 
 6. Implementation Detail
+
+TODO
 - Other implementation details goes here.  For example:  
 - Describe your use of Forwarding Addresses, including what happens when a Forwarding Address needs to be forwarded to yet another page.
 - Describe how a scan is done, touching each record once even when there are Forwarding Addresses.
 - Describe how you determine that a previously slot on a page is empty (after record is deleted), so that the slot can be re-used for another record.  (Yes, a record's rid is supposed to be permanent, but only while the record exists.)
 
-
 7. Other (optional)
+
 - Freely use this section to tell us about things that are related to the project 2, but not related to the other sections, such as design and implementation information for Advanced Features, if you've implemented them (optional).
