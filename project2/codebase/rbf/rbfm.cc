@@ -884,7 +884,6 @@ RC RBFM_ScanIterator::getValueFromRecord(void *data, const vector<Attribute> rec
     return RBFM_SI_NO_VALUE_IN_RECORD;
 }
 
-// TODO: in-progress
 RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data)
 {
     if (!paramsLoaded_)
@@ -957,7 +956,6 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data)
     }
 
     // No matches found.
-    iteratorClosed_ = true;
     return RBFM_EOF;
 }
 

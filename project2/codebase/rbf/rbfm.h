@@ -214,6 +214,8 @@ SlotDirectoryRecordEntry getRecordEntry(const RID rid);
 class RBFM_ScanIterator {
 public:
 
+  friend class RM_ScanIterator;
+
   RBFM_ScanIterator() {};
   ~RBFM_ScanIterator() {};
 
