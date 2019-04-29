@@ -25,9 +25,6 @@ size_t RIDHasher::operator()(const RID rid) const
     return hash<unsigned>{}(rid.pageNum ^ rid.slotNum);
 }
 
-<<<<<<< HEAD
-RecordBasedFileManager *RecordBasedFileManager::_rbf_manager = NULL;
-=======
 bool evalCompOp(void *x, void *y, CompOp op, AttrType attrType)
 {
     int ix, iy;
@@ -41,65 +38,63 @@ bool evalCompOp(void *x, void *y, CompOp op, AttrType attrType)
 
     switch (attrType)
     {
-        case TypeInt:
-            ix = *(int *) x;
-            iy = *(int *) y;
+    case TypeInt:
+        ix = *(int *)x;
+        iy = *(int *)y;
 
-            x_LT_y = ix <  iy;
-            x_EQ_y = ix == iy;
-            x_GT_y = ix >  iy;
-            break;
+        x_LT_y = ix < iy;
+        x_EQ_y = ix == iy;
+        x_GT_y = ix > iy;
+        break;
 
-        case TypeReal:
-            fx = *(float *) x;
-            fy = *(float *) y;
+    case TypeReal:
+        fx = *(float *)x;
+        fy = *(float *)y;
 
-            x_LT_y = fx <  fy;
-            x_EQ_y = fx == fy;
-            x_GT_y = fx >  fy;
-            break;
+        x_LT_y = fx < fy;
+        x_EQ_y = fx == fy;
+        x_GT_y = fx > fy;
+        break;
 
-        case TypeVarChar:
-            sx = string {(char *) x};
-            sy = string {(char *) y};
+    case TypeVarChar:
+        sx = string{(char *)x};
+        sy = string{(char *)y};
 
-            cmp = sx.compare(sy);
+        cmp = sx.compare(sy);
 
-            x_LT_y = cmp <  0;
-            x_EQ_y = cmp == 0;
-            x_GT_y = cmp > 0;
-            break;
+        x_LT_y = cmp < 0;
+        x_EQ_y = cmp == 0;
+        x_GT_y = cmp > 0;
+        break;
 
-        default:
-            return false;
+    default:
+        return false;
     }
 
     switch (op)
     {
-        case EQ_OP:
-            return x_EQ_y;
-        case LT_OP:
-            return x_LT_y;
-        case LE_OP:
-            return x_LT_y || x_EQ_y;
-        case GT_OP:
-            return x_GT_y;
-        case GE_OP:
-            return x_GT_y || x_EQ_y;
-        case NE_OP:
-            return !x_EQ_y;
-        case NO_OP:
-            return true;
+    case EQ_OP:
+        return x_EQ_y;
+    case LT_OP:
+        return x_LT_y;
+    case LE_OP:
+        return x_LT_y || x_EQ_y;
+    case GT_OP:
+        return x_GT_y;
+    case GE_OP:
+        return x_GT_y || x_EQ_y;
+    case NE_OP:
+        return !x_EQ_y;
+    case NO_OP:
+        return true;
 
-        default:
-            return false;
+    default:
+        return false;
     }
 }
 
-
-RecordBasedFileManager* RBFM_ScanIterator::rbfm_ = NULL;
-RecordBasedFileManager* RecordBasedFileManager::_rbf_manager = NULL;
->>>>>>> ef7fead038a52363d1f8a185d995648b7ddf77ea
+RecordBasedFileManager *RBFM_ScanIterator::rbfm_ = NULL;
+RecordBasedFileManager *RecordBasedFileManager::_rbf_manager = NULL;
 PagedFileManager *RecordBasedFileManager::_pf_manager = NULL;
 
 RecordBasedFileManager *RecordBasedFileManager::instance()
@@ -145,7 +140,7 @@ RC RecordBasedFileManager::createFile(const string &fileName)
 
 RC RecordBasedFileManager::destroyFile(const string &fileName)
 {
-	return _pf_manager->destroyFile(fileName);
+    return _pf_manager->destroyFile(fileName);
 }
 
 RC RecordBasedFileManager::openFile(const string &fileName, FileHandle &fileHandle)
@@ -255,7 +250,7 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
 
     // Checks if the specific slot id exists in the page
     SlotDirectoryHeader slotHeader = getSlotDirectoryHeader(pageData);
-    
+
     if (slotHeader.recordEntriesNumber < rid.slotNum)
     {
         free(pageData);
@@ -291,7 +286,7 @@ RC RecordBasedFileManager::printRecord(const vector<Attribute> &recordDescriptor
     char nullIndicator[nullIndicatorSize];
     memset(nullIndicator, 0, nullIndicatorSize);
     memcpy(nullIndicator, data, nullIndicatorSize);
-    
+
     // We've read in the null indicator, so we can skip past it now
     unsigned offset = nullIndicatorSize;
 
@@ -308,38 +303,38 @@ RC RecordBasedFileManager::printRecord(const vector<Attribute> &recordDescriptor
         }
         switch (recordDescriptor[i].type)
         {
-            case TypeInt:
-                uint32_t data_integer;
+        case TypeInt:
+            uint32_t data_integer;
             memcpy(&data_integer, ((char *)data + offset), INT_SIZE);
-                offset += INT_SIZE;
+            offset += INT_SIZE;
 
-                cout << "" << data_integer << endl;
+            cout << "" << data_integer << endl;
             break;
-            case TypeReal:
-                float data_real;
+        case TypeReal:
+            float data_real;
             memcpy(&data_real, ((char *)data + offset), REAL_SIZE);
-                offset += REAL_SIZE;
+            offset += REAL_SIZE;
 
-                cout << "" << data_real << endl;
+            cout << "" << data_real << endl;
             break;
-            case TypeVarChar:
-                // First VARCHAR_LENGTH_SIZE bytes describe the varchar length
-                uint32_t varcharSize;
+        case TypeVarChar:
+            // First VARCHAR_LENGTH_SIZE bytes describe the varchar length
+            uint32_t varcharSize;
             memcpy(&varcharSize, ((char *)data + offset), VARCHAR_LENGTH_SIZE);
-                offset += VARCHAR_LENGTH_SIZE;
+            offset += VARCHAR_LENGTH_SIZE;
 
-                // Gets the actual string.
+            // Gets the actual string.
             char *data_string = (char *)malloc(varcharSize + 1);
-                if (data_string == NULL)
-                    return RBFM_MALLOC_FAILED;
+            if (data_string == NULL)
+                return RBFM_MALLOC_FAILED;
             memcpy(data_string, ((char *)data + offset), varcharSize);
 
-                // Adds the string terminator.
-                data_string[varcharSize] = '\0';
-                offset += varcharSize;
+            // Adds the string terminator.
+            data_string[varcharSize] = '\0';
+            offset += varcharSize;
 
-                cout << data_string << endl;
-                free(data_string);
+            cout << data_string << endl;
+            free(data_string);
             break;
         }
     }
@@ -367,7 +362,7 @@ SlotDirectoryRecordEntry RecordBasedFileManager::getSlotDirectoryRecordEntry(voi
     // Getting the slot directory entry data.
     SlotDirectoryRecordEntry recordEntry;
     memcpy(
-            &recordEntry,
+        &recordEntry,
         ((char *)page + sizeof(SlotDirectoryHeader) + recordEntryNumber * sizeof(SlotDirectoryRecordEntry)),
         sizeof(SlotDirectoryRecordEntry));
 
@@ -379,7 +374,7 @@ void RecordBasedFileManager::setSlotDirectoryRecordEntry(void *page, unsigned re
     // Setting the slot directory entry data.
     memcpy(
         ((char *)page + sizeof(SlotDirectoryHeader) + recordEntryNumber * sizeof(SlotDirectoryRecordEntry)),
-            &recordEntry,
+        &recordEntry,
         sizeof(SlotDirectoryRecordEntry));
 }
 
@@ -394,7 +389,7 @@ void RecordBasedFileManager::newRecordBasedPage(void *page)
     memcpy(page, &slotHeader, sizeof(SlotDirectoryHeader));
 }
 
-unsigned RecordBasedFileManager::getRecordSize(const vector<Attribute> &recordDescriptor, const void *data) 
+unsigned RecordBasedFileManager::getRecordSize(const vector<Attribute> &recordDescriptor, const void *data)
 {
     // Read in the null indicator
     int nullIndicatorSize = getNullIndicatorSize(recordDescriptor.size());
@@ -414,20 +409,20 @@ unsigned RecordBasedFileManager::getRecordSize(const vector<Attribute> &recordDe
             continue;
         switch (recordDescriptor[i].type)
         {
-            case TypeInt:
-                size += INT_SIZE;
-                offset += INT_SIZE;
+        case TypeInt:
+            size += INT_SIZE;
+            offset += INT_SIZE;
             break;
-            case TypeReal:
-                size += REAL_SIZE;
-                offset += REAL_SIZE;
+        case TypeReal:
+            size += REAL_SIZE;
+            offset += REAL_SIZE;
             break;
-            case TypeVarChar:
-                uint32_t varcharSize;
-                // We have to get the size of the VarChar field by reading the integer that precedes the string value itself
+        case TypeVarChar:
+            uint32_t varcharSize;
+            // We have to get the size of the VarChar field by reading the integer that precedes the string value itself
             memcpy(&varcharSize, (char *)data + offset, VARCHAR_LENGTH_SIZE);
-                size += varcharSize;
-                offset += varcharSize + VARCHAR_LENGTH_SIZE;
+            size += varcharSize;
+            offset += varcharSize + VARCHAR_LENGTH_SIZE;
             break;
         }
     }
@@ -507,7 +502,7 @@ RC RecordBasedFileManager::readAttribute(FileHandle &fileHandle, const vector<At
     return -1;
 }
 // Calculate actual bytes for null-indicator for the given field counts
-int RecordBasedFileManager::getNullIndicatorSize(int fieldCount) 
+int RecordBasedFileManager::getNullIndicatorSize(int fieldCount)
 {
     return int(ceil((double)fieldCount / CHAR_BIT));
 }
@@ -522,7 +517,7 @@ bool RecordBasedFileManager::fieldIsNull(char *nullIndicator, int i)
 void RecordBasedFileManager::setFieldToNull(char *nullIndicator, int i)
 {
     int indicatorIndex = i / CHAR_BIT;
-    int indicatorMask  = 1 << (CHAR_BIT - 1 - (i % CHAR_BIT));
+    int indicatorMask = 1 << (CHAR_BIT - 1 - (i % CHAR_BIT));
     nullIndicator[indicatorIndex] |= indicatorMask;
 }
 
@@ -569,12 +564,12 @@ void RecordBasedFileManager::getRecordAtOffset(void *page, unsigned offset, cons
     unsigned data_offset = nullIndicatorSize;
     // directory_base: points to the start of our directory of indices
     char *directory_base = start + sizeof(RecordLength) + recordNullIndicatorSize;
-    
+
     for (unsigned i = 0; i < recordDescriptor.size(); i++)
     {
         if (fieldIsNull(nullIndicator, i))
             continue;
-        
+
         // Grab pointer to end of this column
         ColumnOffset endPointer;
         memcpy(&endPointer, directory_base + i * sizeof(ColumnOffset), sizeof(ColumnOffset));
@@ -633,24 +628,24 @@ void RecordBasedFileManager::setRecordAtOffset(void *page, unsigned offset, cons
             // Read in the data for the next column, point rec_offset to end of newly inserted data
             switch (recordDescriptor[i].type)
             {
-                case TypeInt:
+            case TypeInt:
                 memcpy(start + rec_offset, data_start, INT_SIZE);
-                    rec_offset += INT_SIZE;
-                    data_offset += INT_SIZE;
+                rec_offset += INT_SIZE;
+                data_offset += INT_SIZE;
                 break;
-                case TypeReal:
+            case TypeReal:
                 memcpy(start + rec_offset, data_start, REAL_SIZE);
-                    rec_offset += REAL_SIZE;
-                    data_offset += REAL_SIZE;
+                rec_offset += REAL_SIZE;
+                data_offset += REAL_SIZE;
                 break;
-                case TypeVarChar:
-                    unsigned varcharSize;
-                    // We have to get the size of the VarChar field by reading the integer that precedes the string value itself
-                    memcpy(&varcharSize, data_start, VARCHAR_LENGTH_SIZE);
-                    memcpy(start + rec_offset, data_start + VARCHAR_LENGTH_SIZE, varcharSize);
-                    // We also have to account for the overhead given by that integer.
-                    rec_offset += varcharSize;
-                    data_offset += VARCHAR_LENGTH_SIZE + varcharSize;
+            case TypeVarChar:
+                unsigned varcharSize;
+                // We have to get the size of the VarChar field by reading the integer that precedes the string value itself
+                memcpy(&varcharSize, data_start, VARCHAR_LENGTH_SIZE);
+                memcpy(start + rec_offset, data_start + VARCHAR_LENGTH_SIZE, varcharSize);
+                // We also have to account for the overhead given by that integer.
+                rec_offset += varcharSize;
+                data_offset += VARCHAR_LENGTH_SIZE + varcharSize;
                 break;
             }
         }
@@ -701,7 +696,7 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
         free(pageData);
         return SUCCESS;
     }
-    
+
     const auto gainedFreeSpace = recordEntry.length;
 
     const bool adjacent_to_free_space = recordEntry.offset == directoryHeader.freeSpaceOffset;
@@ -763,7 +758,7 @@ RC RecordBasedFileManager::updateRecord(FileHandle &fileHandle, const vector<Att
         return SUCCESS;
 
     // Otherwise, fix the link s.t given RID forwards to new RID.
-    
+
     // Get page for given RID (which is the slot we must forward).
     void *pageData = malloc(PAGE_SIZE);
     if (pageData == NULL)
@@ -797,10 +792,6 @@ int32_t RecordBasedFileManager::findEmptySlot(void *pageData)
     return -1;
 }
 
-<<<<<<< HEAD
-uint32_t getForwardingMask(const SlotDirectoryRecordEntry recordEntry)
-{
-=======
 RC RecordBasedFileManager::scan(
     FileHandle &fileHandle,
     const vector<Attribute> &recordDescriptor,
@@ -815,18 +806,18 @@ RC RecordBasedFileManager::scan(
 
 // Like printRecord() but we ignore the values that are not of the target attribute.
 // This will allocate space on the heap for the value.
-RC RBFM_ScanIterator::getValueFromRecord(void *data, const vector<Attribute> recordDescriptor, const string targetAttrName, void * &value)
+RC RBFM_ScanIterator::getValueFromRecord(void *data, const vector<Attribute> recordDescriptor, const string targetAttrName, void *&value)
 {
     // Parse the null indicator and save it into an array
     int nullIndicatorSize = rbfm_->getNullIndicatorSize(recordDescriptor.size());
     char nullIndicator[nullIndicatorSize];
     memset(nullIndicator, 0, nullIndicatorSize);
     memcpy(nullIndicator, data, nullIndicatorSize);
-    
+
     // We've read in the null indicator, so we can skip past it now
     unsigned offset = nullIndicatorSize;
 
-    for (unsigned i = 0; i < (unsigned) recordDescriptor.size(); i++)
+    for (unsigned i = 0; i < (unsigned)recordDescriptor.size(); i++)
     {
         // If the field is null, don't print it
         bool isNull = rbfm_->fieldIsNull(nullIndicator, i);
@@ -839,55 +830,55 @@ RC RBFM_ScanIterator::getValueFromRecord(void *data, const vector<Attribute> rec
 
         switch (recordDescriptor[i].type)
         {
-            case TypeInt:
-                uint32_t data_integer;
-                memcpy(&data_integer, ((char*) data + offset), INT_SIZE);
-                offset += INT_SIZE;
+        case TypeInt:
+            uint32_t data_integer;
+            memcpy(&data_integer, ((char *)data + offset), INT_SIZE);
+            offset += INT_SIZE;
 
-                if (isTargetAttr)
-                {
-                    value = malloc(INT_SIZE);
-                    memcpy(value, &data_integer, INT_SIZE);
-                    return SUCCESS;
-                }
-                break;
+            if (isTargetAttr)
+            {
+                value = malloc(INT_SIZE);
+                memcpy(value, &data_integer, INT_SIZE);
+                return SUCCESS;
+            }
+            break;
 
-            case TypeReal:
-                float data_real;
-                memcpy(&data_real, ((char*) data + offset), REAL_SIZE);
-                offset += REAL_SIZE;
+        case TypeReal:
+            float data_real;
+            memcpy(&data_real, ((char *)data + offset), REAL_SIZE);
+            offset += REAL_SIZE;
 
-                if (isTargetAttr)
-                {
-                    value = malloc(REAL_SIZE);
-                    memcpy(value, &data_real, REAL_SIZE);
-                    return SUCCESS;
-                }
-                break;
+            if (isTargetAttr)
+            {
+                value = malloc(REAL_SIZE);
+                memcpy(value, &data_real, REAL_SIZE);
+                return SUCCESS;
+            }
+            break;
 
-            case TypeVarChar:
-                // First VARCHAR_LENGTH_SIZE bytes describe the varchar length
-                uint32_t varcharSize;
-                memcpy(&varcharSize, ((char*) data + offset), VARCHAR_LENGTH_SIZE);
-                offset += VARCHAR_LENGTH_SIZE;
+        case TypeVarChar:
+            // First VARCHAR_LENGTH_SIZE bytes describe the varchar length
+            uint32_t varcharSize;
+            memcpy(&varcharSize, ((char *)data + offset), VARCHAR_LENGTH_SIZE);
+            offset += VARCHAR_LENGTH_SIZE;
 
-                // Gets the actual string.
-                char *data_string = (char*) malloc(varcharSize + 1);
-                if (data_string == NULL)
-                    return RBFM_MALLOC_FAILED;
-                memcpy(data_string, ((char*) data + offset), varcharSize);
+            // Gets the actual string.
+            char *data_string = (char *)malloc(varcharSize + 1);
+            if (data_string == NULL)
+                return RBFM_MALLOC_FAILED;
+            memcpy(data_string, ((char *)data + offset), varcharSize);
 
-                // Adds the string terminator.
-                data_string[varcharSize] = '\0';
-                offset += varcharSize;
+            // Adds the string terminator.
+            data_string[varcharSize] = '\0';
+            offset += varcharSize;
 
-                if (isTargetAttr)
-                {
-                    value = data_string;
-                    return SUCCESS;
-                }
-                free(data_string);
-                break;
+            if (isTargetAttr)
+            {
+                value = data_string;
+                return SUCCESS;
+            }
+            free(data_string);
+            break;
         }
     }
     return RBFM_SI_NO_VALUE_IN_RECORD;
@@ -900,7 +891,6 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data)
         return RBFM_SI_UNLOADED;
     if (iteratorClosed_)
         return RBFM_SI_CLOSED;
-
 
     // Search for first matching record.
     int rc;
@@ -964,7 +954,6 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data)
             free(record);
         }
         free(pageData);
-        
     }
 
     // No matches found.
@@ -984,8 +973,8 @@ RC RBFM_ScanIterator::load(
     FileHandle &fileHandle,
     const vector<Attribute> recordDescriptor,
     const string conditionAttributeName,
-    const CompOp compOp,                  // comparision type such as "<" and "="
-    const void *value,                    // used in the comparison
+    const CompOp compOp,                // comparision type such as "<" and "="
+    const void *value,                  // used in the comparison
     const vector<string> attributeNames // a list of projected attributes
 )
 {
@@ -1014,7 +1003,7 @@ RC RBFM_ScanIterator::load(
 }
 
 RC RBFM_ScanIterator::projectRecord(const void *data_og, const vector<Attribute> recordDescriptor_og,
-                                    void * &data_pj, vector<Attribute> &recordDescriptor_pj, int &size_pj,
+                                    void *&data_pj, vector<Attribute> &recordDescriptor_pj, int &size_pj,
                                     const vector<string> projectedAttributeNames)
 {
     if (!paramsLoaded_)
@@ -1034,14 +1023,14 @@ RC RBFM_ScanIterator::projectRecord(const void *data_og, const vector<Attribute>
     int nullIndicatorSize_pj = rbfm_->getNullIndicatorSize(projectedAttributeNames.size());
     char nullIndicator_pj[nullIndicatorSize_pj];
     memset(nullIndicator_pj, 0, nullIndicatorSize_pj);
-    
+
     // We've read in the null indicator, so we can skip past it now
     unsigned offset_og = nullIndicatorSize_og;
     unsigned offset_pj = nullIndicatorSize_pj;
     unsigned nullIndicatorField_pj = 0; // We'll build our projected nullIndicator as we go.
 
     // For each original attribute, if it's a projected attribute, add it to the projected data.
-    for (unsigned i = 0; i < (unsigned) recordDescriptor_og.size(); i++)
+    for (unsigned i = 0; i < (unsigned)recordDescriptor_og.size(); i++)
     {
         // Check if this is something we should be projecting.
         bool shouldProject = false;
@@ -1072,44 +1061,44 @@ RC RBFM_ScanIterator::projectRecord(const void *data_og, const vector<Attribute>
         }
         switch (recordDescriptor_og[i].type)
         {
-            case TypeInt:
-                if (shouldProject)
-                {
-                    memcpy((char *) data_pj + offset_pj, (char *) data_og + offset_og, INT_SIZE);
-                    offset_pj += INT_SIZE;
-                }
-                offset_og += INT_SIZE;
-                break;
+        case TypeInt:
+            if (shouldProject)
+            {
+                memcpy((char *)data_pj + offset_pj, (char *)data_og + offset_og, INT_SIZE);
+                offset_pj += INT_SIZE;
+            }
+            offset_og += INT_SIZE;
+            break;
 
-            case TypeReal:
-                if (shouldProject)
-                {
-                    memcpy((char *) data_pj + offset_pj, (char *) data_og + offset_og, REAL_SIZE);
-                    offset_pj += REAL_SIZE;
-                }
-                offset_og += REAL_SIZE;
-                break;
+        case TypeReal:
+            if (shouldProject)
+            {
+                memcpy((char *)data_pj + offset_pj, (char *)data_og + offset_og, REAL_SIZE);
+                offset_pj += REAL_SIZE;
+            }
+            offset_og += REAL_SIZE;
+            break;
 
-            case TypeVarChar:
-                // First VARCHAR_LENGTH_SIZE bytes describe the varchar length
-                uint32_t varcharSize;
-                memcpy(&varcharSize, (char*) data_og + offset_og, VARCHAR_LENGTH_SIZE);
-                if (shouldProject)
-                {
-                    memcpy((char *) data_pj + offset_pj, (char *) data_og + offset_og, VARCHAR_LENGTH_SIZE);
-                    offset_pj += VARCHAR_LENGTH_SIZE;
-                }
-                offset_og += VARCHAR_LENGTH_SIZE;
+        case TypeVarChar:
+            // First VARCHAR_LENGTH_SIZE bytes describe the varchar length
+            uint32_t varcharSize;
+            memcpy(&varcharSize, (char *)data_og + offset_og, VARCHAR_LENGTH_SIZE);
+            if (shouldProject)
+            {
+                memcpy((char *)data_pj + offset_pj, (char *)data_og + offset_og, VARCHAR_LENGTH_SIZE);
+                offset_pj += VARCHAR_LENGTH_SIZE;
+            }
+            offset_og += VARCHAR_LENGTH_SIZE;
 
-                // Gets the actual string.
-                if (shouldProject)
-                {
-                    memcpy((char *) data_pj + offset_pj, (char*) data_og + offset_og, varcharSize);
-                    offset_pj += varcharSize;
-                }
-                offset_og += varcharSize;
+            // Gets the actual string.
+            if (shouldProject)
+            {
+                memcpy((char *)data_pj + offset_pj, (char *)data_og + offset_og, varcharSize);
+                offset_pj += varcharSize;
+            }
+            offset_og += varcharSize;
 
-                break;
+            break;
         }
     }
 
@@ -1123,8 +1112,8 @@ RC RBFM_ScanIterator::projectRecord(const void *data_og, const vector<Attribute>
     return SUCCESS;
 }
 
-uint32_t getForwardingMask(const SlotDirectoryRecordEntry recordEntry) {
->>>>>>> ef7fead038a52363d1f8a185d995648b7ddf77ea
+uint32_t getForwardingMask(const SlotDirectoryRecordEntry recordEntry)
+{
     const auto nbits_length = sizeof(recordEntry.length) * CHAR_BIT;
     const auto last_bit_position = nbits_length - 1;
     return 1 << last_bit_position;
@@ -1148,11 +1137,11 @@ bool isSlotForwarding(const SlotDirectoryRecordEntry recordEntry)
 
 RID getRID(SlotDirectoryRecordEntry recordEntry)
 {
-        markSlotAsTerminal(recordEntry); // We don't want the fwd bit to impact our new slot number.
-        RID new_rid;
-        new_rid.pageNum = recordEntry.offset;
-        new_rid.slotNum = recordEntry.length;
-        return new_rid;
+    markSlotAsTerminal(recordEntry); // We don't want the fwd bit to impact our new slot number.
+    RID new_rid;
+    new_rid.pageNum = recordEntry.offset;
+    new_rid.slotNum = recordEntry.length;
+    return new_rid;
 }
 
 SlotDirectoryRecordEntry getRecordEntry(const RID rid)
@@ -1163,8 +1152,6 @@ SlotDirectoryRecordEntry getRecordEntry(const RID rid)
     markSlotAsForwarding(recordEntry);
     return recordEntry;
 }
-<<<<<<< HEAD
-=======
 
 void RecordBasedFileManager::printHeaderAndAllRecordEntries(FileHandle &fileHandle)
 {
@@ -1183,4 +1170,3 @@ void RecordBasedFileManager::printHeaderAndAllRecordEntries(FileHandle &fileHand
         free(page);
     }
 }
->>>>>>> ef7fead038a52363d1f8a185d995648b7ddf77ea
