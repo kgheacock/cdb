@@ -1084,7 +1084,7 @@ namespace RBFTest_14
         // Updated record remains on same page (primary page).
         int toUnforwarded_shrinkSize(RecordBasedFileManager *rbfm)
         {
-            cout << "****In RBF Test Case 14 (unforwarded to unforwarded, shrink) ****" << endl;
+            cout << "**** In RBF Test Case 14 (unforwarded to unforwarded, shrink) ****" << endl;
             int index = 0;
             vector<Attribute> recordDescriptor;
             vector<RID> rids;
@@ -1161,7 +1161,7 @@ namespace RBFTest_14
 
         int toUnforwarded_constSize(RecordBasedFileManager *rbfm)
         {
-            cout << "****In RBF Test Case 14 (unforwarded to unforwarded, const) ****" << endl;
+            cout << "**** In RBF Test Case 14 (unforwarded to unforwarded, const) ****" << endl;
             int index = 0;
             vector<Attribute> recordDescriptor;
             vector<RID> rids;
@@ -1212,7 +1212,7 @@ namespace RBFTest_14
         // Updated record may increase in size but remain on same page (if there's space).
         int toUnforwarded_incrSize(RecordBasedFileManager *rbfm)
         {
-            cout << "****In RBF Test Case 14 (unforwarded to unforwarded, incr) ****" << endl;
+            cout << "**** In RBF Test Case 14 (unforwarded to unforwarded, incr) ****" << endl;
             int index = 0;
             vector<Attribute> recordDescriptor;
             vector<RID> rids;
@@ -1298,7 +1298,7 @@ namespace RBFTest_14
         // updateRecord() should then properly forward the original RID to the new/updated record.
         int toForwarded(RecordBasedFileManager *rbfm)
         {
-            cout << "****In RBF Test Case 14 (unforwarded to forwarded) ****" << endl;
+            cout << "**** In RBF Test Case 14 (unforwarded to forwarded) ****" << endl;
             RID forwardingRID;
             vector<RID> rids;
             vector<Attribute> recordDescriptor;
@@ -1362,7 +1362,7 @@ namespace RBFTest_14
 
         int toSamePage(RecordBasedFileManager *rbfm)
         {
-            cout << "****In RBF Test Case 14 (forwarded, updated record on same page as before) ****" << endl;
+            cout << "**** In RBF Test Case 14 (forwarded, updated record on same page as before) ****" << endl;
 
             // Allocate our huge record s.t. it's guaranteed to forward.
             string lengthyVarChar (2048, 'c');
@@ -1388,7 +1388,7 @@ namespace RBFTest_14
 
         int toDiffPage(RecordBasedFileManager *rbfm)
         {
-            cout << "****In RBF Test Case 14 (forwarded, updated record on different page as before) ****" << endl;
+            cout << "**** In RBF Test Case 14 (forwarded, updated record on different page as before) ****" << endl;
 
             // Delete records that are not the forwarding.
             // This clears up space in the page for our updated record in the next step.
@@ -1513,12 +1513,16 @@ namespace RBFTest_15
                 // Compare expected ==? actual.
                 const bool expected_eq_next = memcmp(nextRecord, expectedRecord, expectedSize) == 0 ? true : false;
                 assert(expected_eq_next && "nextRecord does not match what we expected.");
+
+                free(expectedRecord);
+                free(nextRecord);
+                free(record);
                 return success;
             }
 
             int singleAttribute(RecordBasedFileManager *rbfm)
             {
-                cout << "****In RBF Test Case 15 (single page, single record, single projected attribute) ****" << endl;
+                cout << "**** In RBF Test Case 15 (single page, single record, single projected attribute) ****" << endl;
                 vector<string> projectedAttrNames { "Real" };
                 auto rc = test(rbfm, projectedAttrNames);
                 assert(rc == SUCCESS);
@@ -1528,7 +1532,7 @@ namespace RBFTest_15
 
             int manyAttributes(RecordBasedFileManager *rbfm)
             {
-                cout << "****In RBF Test Case 15 (single page, single record, many projected attributes) ****" << endl;
+                cout << "**** In RBF Test Case 15 (single page, single record, many projected attributes) ****" << endl;
                 vector<string> projectedAttrNames { "Real" };
                 auto rc = test(rbfm, projectedAttrNames);
                 assert(rc == SUCCESS);
@@ -1541,7 +1545,7 @@ namespace RBFTest_15
         {
             int consecutive(RecordBasedFileManager *rbfm)
             {
-                cout << "****In RBF Test Case 15 (single page, many records, consecutive) ****" << endl;
+                cout << "**** In RBF Test Case 15 (single page, many records, consecutive) ****" << endl;
                 // Insert two identical records (one attribute).
                 // Expect both records to be returned by scan (no filtering of attributes is necessary).
 
@@ -1584,12 +1588,10 @@ namespace RBFTest_15
                 assert(expected_eq_next && "nextRecord does not match what we expected.");
 
                 // Scan for a record.
-                nextRecord = calloc(PAGE_SIZE, sizeof(uint8_t));
                 rc = si.getNextRecord(nextRID, nextRecord);
                 assert (rc == SUCCESS && "getNextRecord() should not fail.");
 
                 // Create our expected record.
-                expectedRecord = calloc(PAGE_SIZE, sizeof(uint8_t));
                 prepareRecord_real(compValue, expectedRecordDescriptor, expectedRecord, &expectedSize);
 
                 // Compare expected ==? actual.
@@ -1597,6 +1599,9 @@ namespace RBFTest_15
                 assert(expected_eq_next && "nextRecord does not match what we expected.");
 
                 cout << "RBF Test Case 15 Finished (single page, many records, consecutive)" << endl << endl;
+                free(expectedRecord);
+                free(nextRecord);
+                free(record);
                 return success;
             }
 
@@ -1607,7 +1612,7 @@ namespace RBFTest_15
                 // Expect both Xs to be returned by scan.  Also expect Y to not be returned by scan.
                 // (no filtering of attributes is necessary).
 
-                cout << "****In RBF Test Case 15 (single page, many records, nonconsecutive) ****" << endl;
+                cout << "**** In RBF Test Case 15 (single page, many records, nonconsecutive) ****" << endl;
                 // Insert two identical records (one attribute).
                 // Expect both records to be returned by scan (no filtering of attributes is necessary).
 
@@ -1662,12 +1667,10 @@ namespace RBFTest_15
                 assert(expected_eq_next && "nextRecord does not match what we expected.");
 
                 // Scan for a record.
-                nextRecord = calloc(PAGE_SIZE, sizeof(uint8_t));
                 rc = si.getNextRecord(nextRID, nextRecord);
                 assert (rc == SUCCESS && "getNextRecord() should not fail.");
 
                 // Create our expected record.
-                expectedRecord = calloc(PAGE_SIZE, sizeof(uint8_t));
                 prepareRecord_real(compValue, expectedRecordDescriptor, expectedRecord, &expectedSize);
 
                 // Compare expected ==? actual.
@@ -1675,6 +1678,10 @@ namespace RBFTest_15
                 assert(expected_eq_next && "nextRecord does not match what we expected.");
 
                 cout << "RBF Test Case 15 Finished (single page, many records, nonconsecutive)" << endl << endl;
+                free(expectedRecord);
+                free(nextRecord);
+                free(record_Y);
+                free(record_X);
                 return success;
             }
         };
@@ -1711,7 +1718,7 @@ namespace RBFTest_15
             // Insert another record Y in the second page.
             // Scan and expect both Ys to be returned.
 
-            cout << "****In RBF Test Case 15 (many pages) ****" << endl;
+            cout << "**** In RBF Test Case 15 (many pages) ****" << endl;
             // Insert two identical records (one attribute).
             // Expect both records to be returned by scan (no filtering of attributes is necessary).
 
@@ -1740,22 +1747,13 @@ namespace RBFTest_15
                 prevRID = currRID;
                 rc = rbfm->insertRecord(fileHandle, recordDescriptor_X, record_X, currRID);
                 assert(rc == SUCCESS && "Insert record should not fail.");
-                cout << "Just inserted record: "; currRID.print(); cout << endl;
-                rbfm->printHeaderAndAllRecordEntries(fileHandle);
             }
             // Update the last two Xs to be Ys.
             rc = rbfm->updateRecord(fileHandle, recordDescriptor_Y, record_Y, prevRID); // On initial page.
             assert(rc == SUCCESS && "Update record should not fail.");
-            cout << "Just updated records:" << endl;
-            cout << "prevRID: "; prevRID.print(); cout << endl;
-            rbfm->printHeaderAndAllRecordEntries(fileHandle);
 
             rc = rbfm->updateRecord(fileHandle, recordDescriptor_Y, record_Y, currRID); // On another page.
             assert(rc == SUCCESS && "Update record should not fail.");
-            cout << "Just updated records:" << endl;
-            cout << "prevRID: "; prevRID.print(); cout << endl;
-            cout << "currRID: "; currRID.print(); cout << endl;
-            rbfm->printHeaderAndAllRecordEntries(fileHandle);
 
             // Setup scan parameters.  Project a single attribute.
             string targetAttrName = recordDescriptor_Y.back().name; // The real attribute.
@@ -1783,19 +1781,18 @@ namespace RBFTest_15
             assert(expected_eq_next && "nextRecord does not match what we expected.");
 
             // Scan for a record.
-            nextRecord = calloc(PAGE_SIZE, sizeof(uint8_t));
             rc = si.getNextRecord(nextRID, nextRecord);
             assert (rc == SUCCESS && "getNextRecord() should not fail.");
-
-            // Create our expected record.
-            expectedRecord = calloc(PAGE_SIZE, sizeof(uint8_t));
-            prepareRecord_real(compValue, expectedRecordDescriptor, expectedRecord, &expectedSize);
 
             // Compare expected ==? actual.
             expected_eq_next = memcmp(nextRecord, expectedRecord, expectedSize) == 0 ? true : false;
             assert(expected_eq_next && "nextRecord does not match what we expected.");
 
             cout << "RBF Test Case 15 Finished (many pages)" << endl << endl;
+            free(expectedRecord);
+            free(nextRecord);
+            free(record_Y);
+            free(record_X);
             return success;
         }
 

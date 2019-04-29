@@ -874,6 +874,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data)
 
                 memcpy(data, projectedRecord, projectedSize);
 
+                free(projectedRecord);
                 free(record);
                 free(pageData);
                 return rc;
@@ -1094,5 +1095,6 @@ void RecordBasedFileManager::printHeaderAndAllRecordEntries(FileHandle &fileHand
             cout << "    entry " << slot_j << " = {length: " << entry.length << ", offset: " << entry.offset << "}" << endl;
         }
         cout << endl;
+        free(page);
     }
 }
