@@ -212,7 +212,10 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 
     // Updating the slot directory header.
     slotHeader.freeSpaceOffset = newRecordEntry.offset;
-    slotHeader.recordEntriesNumber += 1;
+    if (!foundEmptySlot)
+    {
+        slotHeader.recordEntriesNumber++;
+    }
     setSlotDirectoryHeader(pageData, slotHeader);
 
     // Adding the record data.

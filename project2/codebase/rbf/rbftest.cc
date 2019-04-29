@@ -1746,13 +1746,15 @@ namespace RBFTest_15
             // Update the last two Xs to be Ys.
             rc = rbfm->updateRecord(fileHandle, recordDescriptor_Y, record_Y, prevRID); // On initial page.
             assert(rc == SUCCESS && "Update record should not fail.");
+            cout << "Just updated records:" << endl;
+            cout << "prevRID: "; prevRID.print(); cout << endl;
+            rbfm->printHeaderAndAllRecordEntries(fileHandle);
+
             rc = rbfm->updateRecord(fileHandle, recordDescriptor_Y, record_Y, currRID); // On another page.
             assert(rc == SUCCESS && "Update record should not fail.");
-
             cout << "Just updated records:" << endl;
             cout << "prevRID: "; prevRID.print(); cout << endl;
             cout << "currRID: "; currRID.print(); cout << endl;
-
             rbfm->printHeaderAndAllRecordEntries(fileHandle);
 
             // Setup scan parameters.  Project a single attribute.
