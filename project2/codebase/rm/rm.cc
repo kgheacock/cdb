@@ -49,26 +49,40 @@ void RelationManager::addTableToCatalog(Table *table, const vector<Attribute> &a
     _rbfm->openFile(tableCatalogName + fileSuffix, catalogFile);
     int offset = 0;
 
-    unsigned char nullFields = 0;
     void *buffer = malloc(PAGE_SIZE);
+
+    unsigned char nullFields = 0;
     memcpy((char *)buffer + offset, &nullFields, 1);
     offset += 1;
-    memcpy((char *)buffer + offset, &table->tableId, sizeof(uint32_t));
+
+    // TableID
+    uint32_t tableId = table->tableId;
+    memcpy((char *)buffer + offset, &tableId, sizeof(uint32_t));
     offset += sizeof(uint32_t);
-    int tableNameSize = table->tableName.length();
+
+    // TableName size
+    uint32_t tableNameSize = table->tableName.length();
     memcpy((char *)buffer + offset, &tableNameSize, sizeof(uint32_t));
     offset += sizeof(uint32_t);
-    memcpy((char *)buffer + offset, &table->tableName, tableNameSize);
+
+    // TableName value
+    const char *tableName = table->tableName.c_str();
+    memcpy((char *)buffer + offset, tableName, tableNameSize);
     offset += tableNameSize;
-    int fileNameSize = table->fileName.length();
+
+    // FileName size
+    uint32_t fileNameSize = table->fileName.length();
     memcpy((char *)buffer + offset, &fileNameSize, sizeof(uint32_t));
     offset += sizeof(uint32_t);
-    memcpy((char *)buffer + offset, &table->fileName, fileNameSize);
-    RID temp;
 
+    // FileName value
+    const char *fileName = table->fileName.c_str();
+    memcpy((char *)buffer + offset, fileName, fileNameSize);
+
+    RID temp;
     _rbfm->insertRecord(catalogFile, tableCatalogAttributes, buffer, temp);
 
-    addColumnsToCatalog(attrs, table->tableId);
+    addColumnsToCatalog(attrs, tableId);
     free(buffer);
     _rbfm->closeFile(catalogFile);
 }
@@ -106,21 +120,38 @@ void RelationManager::addColumnsToCatalog(const vector<Attribute> &attrs, int ta
     {
         void *buffer = malloc(PAGE_SIZE);
         int offset = 0;
+
+        // Null fields.
         unsigned char nullFields = 0;
         memcpy((char *)buffer + offset, &nullFields, 1);
         offset += 1;
+
+        // TableId
         memcpy((char *)buffer + offset, &tableId, sizeof(uint32_t));
         offset += sizeof(uint32_t);
+
+        // Column name length
         int fieldNameLength = attr.name.length();
         memcpy((char *)buffer + offset, &fieldNameLength, sizeof(uint32_t));
         offset += sizeof(uint32_t);
-        memcpy((char *)buffer + offset, &attr.name, fieldNameLength);
+
+        // Column name value
+        const char *colName = attr.name.c_str();
+        memcpy((char *)buffer + offset, colName, fieldNameLength);
         offset += fieldNameLength;
+
+        // Column type
         memcpy((char *)buffer + offset, &attr.type, sizeof(uint32_t));
         offset += sizeof(uint32_t);
+
+        // Column length
         memcpy((char *)buffer + offset, &attr.length, sizeof(uint32_t));
         offset += sizeof(uint32_t);
+
+        // Column position
         memcpy((char *)buffer + offset, &colPos, sizeof(uint32_t));
+
+
         RID temp;
         _rbfm->insertRecord(catalogFile, columnCatalogAttributes, buffer, temp);
         colPos++;
@@ -253,6 +284,12 @@ RC RelationManager::deleteTable(const string &tableName)
         _rbfm->deleteRecord(columnCatalogFile, columnCatalogAttributes, rid);
     }
     _rbfm->closeFile(columnCatalogFile);
+
+    /*
+    result = _rbfm->destroyFile(table->tableName + fileSuffix);
+    if (result != SUCCESS)
+        return result;
+    */
 
     return SUCCESS;
 }
