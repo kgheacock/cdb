@@ -2,6 +2,7 @@
 #ifndef _rm_h_
 #define _rm_h_
 
+#include <iostream>
 #include <string>
 #include <string.h>
 #include <math.h>
