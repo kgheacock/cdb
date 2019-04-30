@@ -22,6 +22,9 @@ int RelationManager::getNextIndex()
 
 RelationManager::RelationManager()
 {
+    catalogCreated = -1;
+    tableTable = new Table(0, tableCatalogName, tableCatalogName + fileSuffix);
+    columnTable = new Table(1, columnCatalogName, columnCatalogName + fileSuffix);
 }
 
 RelationManager::~RelationManager()
@@ -55,6 +58,30 @@ void RelationManager::addTableToCatalog(Table *table, const vector<Attribute> &a
     free(buffer);
     _rbfm->closeFile(catalogFile);
 }
+bool RelationManager::catalogExists()
+{
+    if (catalogCreated == 0)
+        return false;
+    if (catalogCreated == 1)
+        return true;
+    FileHandle catalogFile;
+    RC result = _rbfm->openFile(tableTable->fileName, catalogFile);
+    if (result != SUCCESS)
+    {
+        catalogCreated = 0;
+        return false;
+    }
+    _rbfm->closeFile(catalogFile);
+    result = _rbfm->openFile(columnTable->fileName, catalogFile);
+    if (result != SUCCESS)
+    {
+        catalogCreated = 0;
+        return false;
+    }
+    _rbfm->closeFile(catalogFile);
+    catalogCreated = 1;
+    return true;
+}
 void RelationManager::addColumnsToCatalog(const vector<Attribute> &attrs, int tableId)
 {
     FileHandle catalogFile;
@@ -82,7 +109,6 @@ void RelationManager::addColumnsToCatalog(const vector<Attribute> &attrs, int ta
         memcpy((char *)buffer + offset, &colPos, sizeof(uint32_t));
         RID temp;
         _rbfm->insertRecord(catalogFile, columnCatalogAttributes, buffer, temp);
-
         colPos++;
         free(buffer);
     }
@@ -124,7 +150,7 @@ RC RelationManager::createCatalog()
 
     addTableToCatalog(tableTable, tableCatalogAttributes);
     addTableToCatalog(columnTable, columnCatalogAttributes);
-
+    catalogCreated = 1;
     return SUCCESS;
 }
 
@@ -172,7 +198,7 @@ RC RelationManager::deleteCatalog()
     RC result = _rbfm->destroyFile(tableCatalogName + fileSuffix);
     if (result != SUCCESS)
         return result; // Propogate error
-    
+
     result = _rbfm->destroyFile(columnCatalogName + fileSuffix);
     if (result != SUCCESS)
         return result;
@@ -182,6 +208,8 @@ RC RelationManager::deleteCatalog()
 
 RC RelationManager::createTable(const string &tableName, const vector<Attribute> &attrs)
 {
+    if (!catalogExists())
+        return CATALOG_DNE;
     RC result = _rbfm->createFile(tableName + fileSuffix);
     if (result != SUCCESS)
         return result;
@@ -198,6 +226,8 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
 RC RelationManager::deleteTable(const string &tableName)
 {
     //TODO check to make sure column and table catalog aren't being deleted
+    if (!catalogExists())
+        return CATALOG_DNE;
     RID rid;
     Table *table = getTableFromCatalog(tableName, rid);
     int tableId = table->tableId;
@@ -226,6 +256,8 @@ RC RelationManager::deleteTable(const string &tableName)
 
 RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &attrs)
 {
+    if (!catalogExists())
+        return CATALOG_DNE;
     RID temp;
     Table *table = getTableFromCatalog(tableName, temp);
     if (table == nullptr)
@@ -276,6 +308,8 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
 
 RC RelationManager::insertTuple(const string &tableName, const void *data, RID &rid)
 {
+    if (!catalogExists())
+        return CATALOG_DNE;
     //TODO: if column catalog contains a dropped column, insert a null flag into the record before storing
     // Create a table object to check if the table exists and to get the file name
     RID temp;
@@ -301,6 +335,8 @@ RC RelationManager::deleteTuple(const string &tableName, const RID &rid)
 {
 
     // Create a table object to check if the table exists and to get the file name
+    if (!catalogExists())
+        return CATALOG_DNE;
     RID temp;
     Table *table = getTableFromCatalog(tableName, temp);
     if (table == nullptr)
@@ -324,6 +360,8 @@ RC RelationManager::updateTuple(const string &tableName, const void *data, const
 {
     //TODO: if column catalog contains a dropped column, insert a null flag into the record before storing
     // Create a table object to check if the table exists and to get the file name
+    if (!catalogExists())
+        return CATALOG_DNE;
     RID temp;
     Table *table = getTableFromCatalog(tableName, temp);
     if (table == nullptr)

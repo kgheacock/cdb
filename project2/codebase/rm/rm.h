@@ -10,6 +10,7 @@
 #include "../rbf/rbfm.h"
 
 #define TABLE_DNE 8
+#define CATALOG_DNE 9
 
 using namespace std;
 
@@ -22,6 +23,7 @@ public:
   RM_ScanIterator(){};
   RM_ScanIterator(RBFM_ScanIterator ittr) : underlyingIterator(ittr){};
   ~RM_ScanIterator(){};
+  //TODO Make RBFM
 
   // "data" follows the same format as RelationManager::insertTuple()
   RC getNextTuple(RID &rid, void *data);
@@ -93,12 +95,14 @@ private:
   const string tableCatalogName = "Tables";
   const string columnCatalogName = "Columns";
   const string fileSuffix = ".t";
+  int catalogCreated; //-1 for unsure, 0 for no, 1 for yes
   int tableIndex;
   int getNextIndex();
   vector<Attribute> tableCatalogAttributes;
   vector<Attribute> columnCatalogAttributes;
   void addTableToCatalog(Table *table, const vector<Attribute> &attrs);
   void addColumnsToCatalog(const vector<Attribute> &attrs, int tableId);
+  bool catalogExists();
   Table *getTableFromCatalog(const string &tableName, RID &rid);
 };
 
