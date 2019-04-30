@@ -170,17 +170,17 @@ Table *RelationManager::getTableFromCatalog(const string &tableName, RID &rid)
     }
     tableCatalogIterator.close();
     int tableId = 0;
-    //int offset = 0;
-    //int sizeOfFileName = 0;
+    int offset = 0;
+    int sizeOfFileName = 0;
     memcpy(&tableId, data, sizeof(uint32_t));
-    //offset += sizeof(uint32_t);
-    //memcpy(&sizeOfFileName, (char *)data + offset, sizeof(uint32_t));
-    //offset += sizeof(uint32_t);
-    //char fileName[sizeOfFileName + 1];
-    //memcpy(&fileName, (char *)data + offset, sizeOfFileName);
-    //fileName[sizeOfFileName] = '\0';
+    offset += sizeof(uint32_t);
+    memcpy(&sizeOfFileName, (char *)data + offset, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+    char fileName[sizeOfFileName + 1];
+    memcpy(&fileName, (char *)data + offset, sizeOfFileName);
+    fileName[sizeOfFileName] = '\0';
     returnTable->tableName = tableName;
-    returnTable->fileName = tableName + fileSuffix; // Return correct fileName
+    returnTable->fileName = fileName;
     returnTable->tableId = tableId;
     _rbfm->closeFile(tableCatalogFile);
     free(data);
