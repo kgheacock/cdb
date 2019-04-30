@@ -23,6 +23,19 @@ int RelationManager::getNextIndex()
 RelationManager::RelationManager()
 {
     catalogCreated = -1;
+
+    Attribute tableId_t = {.name = "table-id", .type = TypeInt, .length = sizeof(uint32_t)};
+    Attribute tableName_t = {.name = "table-name", .type = TypeVarChar, .length = 50};
+    Attribute fileName_t = {.name = "file-name", .type = TypeVarChar, .length = 50};
+    tableCatalogAttributes = { tableId_t, tableName_t, fileName_t };
+
+    Attribute tableId_c = {.name = "table-id", .type = TypeInt, .length = sizeof(uint32_t)};
+    Attribute columnName_c = {.name = "column-name", .type = TypeVarChar, .length = 50};
+    Attribute columnType_c = {.name = "column-type", .type = TypeInt, .length = sizeof(uint32_t)};
+    Attribute columnLength_c = {.name = "column-length", .type = TypeInt, .length = sizeof(uint32_t)};
+    Attribute columnPos_c = {.name = "column-position", .type = TypeInt, .length = sizeof(uint32_t)};
+    columnCatalogAttributes = { tableId_c, columnName_c, columnType_c, columnLength_c, columnPos_c };
+
     tableTable = new Table(0, tableCatalogName, tableCatalogName + fileSuffix);
     columnTable = new Table(1, columnCatalogName, columnCatalogName + fileSuffix);
 }
@@ -52,6 +65,7 @@ void RelationManager::addTableToCatalog(Table *table, const vector<Attribute> &a
     offset += sizeof(uint32_t);
     memcpy((char *)buffer + offset, &table->fileName, fileNameSize);
     RID temp;
+
     _rbfm->insertRecord(catalogFile, tableCatalogAttributes, buffer, temp);
 
     addColumnsToCatalog(attrs, table->tableId);
@@ -124,26 +138,6 @@ RC RelationManager::createCatalog()
     if (result != SUCCESS)
         return result; //propogate error
 
-    //Prepare column attribute list
-    columnCatalogAttributes.clear();
-    Attribute tableId = {.name = "table-id", .type = TypeInt, .length = sizeof(uint32_t)};
-    Attribute columnName = {.name = "column-name", .type = TypeVarChar, .length = 50};
-    Attribute columnType = {.name = "column-type", .type = TypeInt, .length = sizeof(uint32_t)};
-    Attribute columnLength = {.name = "column-length", .type = TypeInt, .length = sizeof(uint32_t)};
-    Attribute columnPos = {.name = "column-position", .type = TypeInt, .length = sizeof(uint32_t)};
-    columnCatalogAttributes.push_back(tableId);
-    columnCatalogAttributes.push_back(columnName);
-    columnCatalogAttributes.push_back(columnType);
-    columnCatalogAttributes.push_back(columnLength);
-    columnCatalogAttributes.push_back(columnPos);
-    //Prepare table attribute list
-    tableCatalogAttributes.clear();
-    Attribute tableName = {.name = "table-name", .type = TypeVarChar, .length = 50};
-    Attribute fileName = {.name = "file-name", .type = TypeVarChar, .length = 50};
-    tableCatalogAttributes.push_back(tableId);
-    tableCatalogAttributes.push_back(tableName);
-    tableCatalogAttributes.push_back(fileName);
-
     //Create table objects
     tableTable = new Table(getNextIndex(), tableCatalogName, tableCatalogName + fileSuffix);
     columnTable = new Table(getNextIndex(), columnCatalogName, columnCatalogName + fileSuffix);
@@ -161,12 +155,15 @@ Table *RelationManager::getTableFromCatalog(const string &tableName, RID &rid)
     RBFM_ScanIterator tableCatalogIterator;
     vector<string> attrList;
     attrList.push_back("table-id");
+    attrList.push_back("table-name");
     attrList.push_back("file-name");
     FileHandle tableCatalogFile;
     _rbfm->openFile(tableTable->fileName, tableCatalogFile);
-    _rbfm->scan(tableCatalogFile, tableCatalogAttributes, "table-name", CompOp::EQ_OP, &tableName, attrList, tableCatalogIterator);
+
+    _rbfm->scan(tableCatalogFile, tableCatalogAttributes, "table-name", CompOp::EQ_OP, (void *) tableName.c_str(), attrList, tableCatalogIterator);
     void *data = malloc(PAGE_SIZE);
-    if (tableCatalogIterator.getNextRecord(rid, data) == RBFM_EOF)
+    auto rc = tableCatalogIterator.getNextRecord(rid, data);
+    if (rc == RBFM_EOF)
     {
         tableCatalogIterator.close();
         return nullptr;
@@ -193,8 +190,6 @@ Table *RelationManager::getTableFromCatalog(const string &tableName, RID &rid)
 
 RC RelationManager::deleteCatalog()
 {
-    tableCatalogAttributes.clear();
-    columnCatalogAttributes.clear();
     RC result = _rbfm->destroyFile(tableCatalogName + fileSuffix);
     if (result != SUCCESS)
         return result; // Propogate error
@@ -230,11 +225,15 @@ RC RelationManager::deleteTable(const string &tableName)
         return CATALOG_DNE;
     RID rid;
     Table *table = getTableFromCatalog(tableName, rid);
+    if (table == nullptr)
+        return -1;
+
     int tableId = table->tableId;
     if (tableId < 0)
         return -1;
     FileHandle tableCatalogFile;
     _rbfm->openFile(tableCatalogName + fileSuffix, tableCatalogFile);
+
     _rbfm->deleteRecord(tableCatalogFile, tableCatalogAttributes, rid);
     _rbfm->closeFile(tableCatalogFile);
     RM_ScanIterator columnCatalogIterator;
