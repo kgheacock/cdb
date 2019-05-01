@@ -27,6 +27,9 @@ size_t RIDHasher::operator()(const RID rid) const
 
 bool evalCompOp(void *x, void *y, CompOp op, AttrType attrType)
 {
+    if (op == NO_OP)
+        return true;
+
     int ix, iy;
     float fx, fy;
     string sx, sy;
@@ -923,15 +926,20 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data)
             if (rc != SUCCESS)
                 return rc;
 
+            bool recordMatchesSearchCriteria = false; // Assume no match until proven otherwise.
+            if (compOp_ == NO_OP)
+                goto recordMatches;
+
             void *value;
             rc = getValueFromRecord(record, recordDescriptor_, conditionAttribute_.name, value);
             if (rc != SUCCESS)
                 return rc;
-            bool recordMatchesSearchCriteria = evalCompOp(value, value_, compOp_, conditionAttribute_.type);
+            recordMatchesSearchCriteria = evalCompOp(value, value_, compOp_, conditionAttribute_.type);
             free(value);
 
             if (recordMatchesSearchCriteria)
             {
+recordMatches:
                 lastRID_.pageNum = page_i;
                 lastRID_.slotNum = slot_j;
                 lastRIDInitialized_ = true;
@@ -987,6 +995,24 @@ RC RBFM_ScanIterator::load(
     paramsLoaded_ = true;
     iteratorClosed_ = false;
 
+    // Check that all requested projected attributes are valid.
+    for (size_t i = 0; i < attributeNames.size(); i++)
+    {
+        bool foundAttribute = false;
+        for (size_t j = 0; j < recordDescriptor.size(); j++)
+        {
+            if (attributeNames[i] == recordDescriptor[j].name)
+                foundAttribute = true;
+        }
+
+        if (!foundAttribute)
+            return -1;
+    }
+
+    if (compOp == NO_OP)
+        return SUCCESS;
+
+    // Check that we can compare on some attribute.
     for (size_t i = 0; i < recordDescriptor.size(); i++)
     {
         bool attrNamesMatch = recordDescriptor[i].name.compare(conditionAttributeName) == 0;
