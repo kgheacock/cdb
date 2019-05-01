@@ -66,6 +66,7 @@ RC TEST_RM_1(const string &tableName, const int nameLength, const string &name, 
         cout << "**** RM Test Case 1 finished. The result will be examined. *****" << endl << endl;
         free(tuple);
         free(returnedData);
+        free(nullsIndicator);
         return success;
     }
     else
@@ -73,6 +74,7 @@ RC TEST_RM_1(const string &tableName, const int nameLength, const string &name, 
         cout << "**** [FAIL] RM Test Case 1 failed *****" << endl << endl;
         free(tuple);
         free(returnedData);
+        free(nullsIndicator);
         return -1;
     }
 
@@ -122,6 +124,7 @@ RC TEST_RM_2(const string &tableName, const int nameLength, const string &name, 
         cout << "***** RM Test Case 2 finished. The result will be examined. *****" << endl << endl;
         free(tuple);
         free(returnedData);
+        free(nullsIndicator);
         return success;
     }
     else
@@ -129,6 +132,7 @@ RC TEST_RM_2(const string &tableName, const int nameLength, const string &name, 
         cout << "***** [FAIL] RM Test case 2 failed *****" << endl << endl;
         free(tuple);
         free(returnedData);
+        free(nullsIndicator);
         return -1;
     }
         
@@ -191,6 +195,7 @@ RC TEST_RM_3(const string &tableName, const int nameLength, const string &name, 
         free(tuple);
         free(updatedTuple);
         free(returnedData);
+        free(nullsIndicator);
         return success;
     }
     else
@@ -199,6 +204,7 @@ RC TEST_RM_3(const string &tableName, const int nameLength, const string &name, 
         free(tuple);
         free(updatedTuple);
         free(returnedData);
+        free(nullsIndicator);
         return -1;
     }
 
@@ -241,6 +247,7 @@ RC TEST_RM_4(const string &tableName, const int nameLength, const string &name, 
         cout << "***** RM Test case 4 Finished. The result will be examined. *****" << endl << endl;
         free(tuple);
         free(returnedData);
+        free(nullsIndicator);
         return success;
     }
     else
@@ -248,6 +255,7 @@ RC TEST_RM_4(const string &tableName, const int nameLength, const string &name, 
         cout << "***** [FAIL] RM Test Case 4 Failed. *****" << endl << endl;
         free(tuple);
         free(returnedData);
+        free(nullsIndicator);
         return -1;
     }
     
@@ -305,6 +313,7 @@ RC TEST_RM_5(const string &tableName, const int nameLength, const string &name, 
         free(tuple);
         free(returnedData);
         free(returnedData1);
+        free(nullsIndicator);
         return success;
     }
     else
@@ -313,6 +322,7 @@ RC TEST_RM_5(const string &tableName, const int nameLength, const string &name, 
         free(tuple);
         free(returnedData);
         free(returnedData1);
+        free(nullsIndicator);
         return -1;
     }
 }
@@ -353,6 +363,7 @@ RC TEST_RM_6(const string &tableName)
         assert(rc == success && "RelationManager::insertTuple() should not fail.");
 
         rids[i] = rid;
+        free(tuple);
     }
 
     // Set up the iterator
@@ -377,6 +388,7 @@ RC TEST_RM_6(const string &tableName)
     }
     rmsi.close();
 
+    free(nullsIndicator);
     free(returnedData);
     cout << "***** Test Case 6 Finished. The result will be examined. *****" << endl << endl;
     return success;
@@ -474,6 +486,7 @@ RC TEST_RM_8(const string &tableName, vector<RID> &rids, vector<int> &sizes)
 
     cout << "***** Test Case 8 Finished. The result will be examined. *****" << endl << endl;
 
+    free(nullsIndicator);
     return success;
 }
 
@@ -577,12 +590,14 @@ RC TEST_RM_10(const string &tableName, vector<RID> &rids, vector<int> &sizes)
             cout << "***** [FAIL] Test Case 10 Failed *****" << endl << endl;
             free(tuple);
             free(returnedData);
+            free(nullsIndicator);
             return -1;
         }
     }
 
     free(tuple);
     free(returnedData);
+    free(nullsIndicator);
 
     cout << "***** Test Case 10 Finished. The result will be examined. *****" << endl << endl;
 
