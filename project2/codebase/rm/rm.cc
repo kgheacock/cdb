@@ -42,8 +42,6 @@ RelationManager::RelationManager()
 
 RelationManager::~RelationManager()
 {
-    delete tableTable;
-    delete columnTable;
 }
 void RelationManager::addTableToCatalog(Table *table, const vector<Attribute> &attrs)
 {
@@ -171,6 +169,9 @@ RC RelationManager::createCatalog()
     if (result != SUCCESS)
         return result; //propogate error
 
+    //Free table objects created in constructor
+    delete tableTable;
+    delete columnTable;
     //Create table objects
     tableTable = new Table(getNextIndex(), tableCatalogName, tableCatalogName + fileSuffix);
     columnTable = new Table(getNextIndex(), columnCatalogName, columnCatalogName + fileSuffix);
