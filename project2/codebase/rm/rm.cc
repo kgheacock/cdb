@@ -42,6 +42,8 @@ RelationManager::RelationManager()
 
 RelationManager::~RelationManager()
 {
+    delete tableTable;
+    delete columnTable;
 }
 void RelationManager::addTableToCatalog(Table *table, const vector<Attribute> &attrs)
 {
@@ -263,6 +265,7 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
     newTable->tableName = tableName;
     newTable->fileName = tableName + fileSuffix;
     addTableToCatalog(newTable, attrs);
+    delete newTable;
     return SUCCESS;
 }
 
@@ -278,13 +281,17 @@ RC RelationManager::deleteTable(const string &tableName)
 
     RC result = _rbfm->destroyFile(table->fileName);
     if (result != SUCCESS)
+    {
+        delete table;
         return result;
+    }
 
     int tableId = table->tableId;
     if (tableId < 0)
         return -1;
-    FileHandle tableCatalogFile;
+    delete table;
 
+    FileHandle tableCatalogFile;
     result = _rbfm->openFile(tableCatalogName + fileSuffix, tableCatalogFile);
     if (result != SUCCESS)
         return result;
@@ -316,24 +323,27 @@ RC RelationManager::deleteTable(const string &tableName)
     {
         result = columnCatalogIterator.getNextTuple(rid, data);
         if (result != SUCCESS && result != RBFM_EOF) // Some error.
+        {
+            free(data);
+            columnCatalogIterator.close();
             return result;
+        }
 
         if (result == RBFM_EOF) // Base case: no more attributes to delete.
         {
-            _rbfm->closeFile(columnCatalogFile);
-            return SUCCESS;
+            free(data);
+            columnCatalogIterator.close();
+            return _rbfm->closeFile(columnCatalogFile);
         }
 
         auto deleted = _rbfm->deleteRecord(columnCatalogFile, columnCatalogAttributes, rid);
         if (deleted != SUCCESS)
+        {
+            free(data);
+            columnCatalogIterator.close();
             return deleted;
+        }
     }
-
-    /*
-    result = _rbfm->destroyFile(table->tableName + fileSuffix);
-    if (result != SUCCESS)
-        return result;
-    */
 }
 
 RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &attrs)
@@ -358,12 +368,19 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
     FileHandle columnCatalogFile;
     RC result = _rbfm->openFile(columnTable->fileName, columnCatalogFile);
     if (result != SUCCESS)
+    {
+        delete table;
         return result;
+    }
 
     RBFM_ScanIterator rbfmi;
-    result = _rbfm->scan(columnCatalogFile, columnCatalogAttributes, "table-id", CompOp::EQ_OP, &table->tableId, columnAttributeNames, rbfmi);
+    int tableId = table->tableId;
+    delete table;
+    result = _rbfm->scan(columnCatalogFile, columnCatalogAttributes, "table-id", CompOp::EQ_OP, (void *) &tableId, columnAttributeNames, rbfmi);
     if (result != SUCCESS)
+    {
         return result;
+    }
 
     RID rid;
     void *data = malloc(PAGE_SIZE);
@@ -432,6 +449,7 @@ RC RelationManager::insertTuple(const string &tableName, const void *data, RID &
     RC result = _rbfm->openFile(table->fileName, fileHandle);
     if (result != SUCCESS)
         return result;
+    delete table;
 
     vector<Attribute> attributes;
     result = getAttributes(tableName, attributes);
@@ -455,8 +473,11 @@ RC RelationManager::deleteTuple(const string &tableName, const RID &rid)
 
     FileHandle fileHandle;
     RC result = _rbfm->openFile(table->fileName, fileHandle);
+    delete table;
     if (result != SUCCESS)
+    {
         return result;
+    }
 
     vector<Attribute> attributes;
     result = getAttributes(tableName, attributes);
@@ -480,6 +501,7 @@ RC RelationManager::updateTuple(const string &tableName, const void *data, const
 
     FileHandle fileHandle;
     RC result = _rbfm->openFile(table->fileName, fileHandle);
+    delete table;
     if (result != SUCCESS)
         return result;
 
@@ -507,6 +529,7 @@ RC RelationManager::readTuple(const string &tableName, const RID &rid, void *dat
 
     FileHandle fileHandle;
     RC result = _rbfm->openFile(table->fileName, fileHandle);
+    delete table;
     if (result != SUCCESS)
         return result;
 
@@ -539,6 +562,7 @@ RC RelationManager::readAttribute(const string &tableName, const RID &rid, const
         return TABLE_DNE;
     FileHandle tableFile;
     _rbfm->openFile(table->fileName, tableFile);
+    delete table;
     RC result = _rbfm->readAttribute(tableFile, attrs, rid, attributeName, data);
     return result;
 }
@@ -552,18 +576,21 @@ RC RelationManager::scan(const string &tableName,
 {
     RID temp;
     Table *tableToScan = getTableFromCatalog(tableName, temp);
+
     vector<Attribute> scannedTableAttributes;
     RC result = getAttributes(tableName, scannedTableAttributes);
     if (result != SUCCESS)
         return result;
+
     FileHandle tableToScanFile;
     _rbfm->openFile(tableToScan->fileName, tableToScanFile);
+    delete tableToScan;
+
     RBFM_ScanIterator underlyingIterator;
     result = _rbfm->scan(tableToScanFile, scannedTableAttributes, conditionAttribute, compOp, value, attributeNames, underlyingIterator);
     if (result != SUCCESS)
         return result;
-    RM_ScanIterator *returnIterator = new RM_ScanIterator(underlyingIterator);
-    rm_ScanIterator = *returnIterator;
+    rm_ScanIterator = RM_ScanIterator(underlyingIterator);
     return SUCCESS;
 }
 

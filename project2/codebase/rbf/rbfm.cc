@@ -970,6 +970,10 @@ recordMatches:
 // TODO: Think about this some more.  Not sure what else we may need to do here.
 RC RBFM_ScanIterator::close()
 {
+    auto rc = rbfm_->closeFile(fileHandle_);
+    if (rc != SUCCESS)
+        return rc;
+
     iteratorClosed_ = true;
     return SUCCESS;
 }
