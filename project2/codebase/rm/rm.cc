@@ -199,7 +199,10 @@ Table *RelationManager::getTableFromCatalog(const string &tableName, RID &rid)
     auto rc = tableCatalogIterator.getNextRecord(rid, data);
     tableCatalogIterator.reset();
     if (rc == RBFM_EOF)
+    {
+        free(data);
         return nullptr;
+    }
 
     int offset = 0;
 

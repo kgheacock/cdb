@@ -441,7 +441,11 @@ RC RecordBasedFileManager::readAttribute(FileHandle &fileHandle, const vector<At
     void *record = malloc(PAGE_SIZE);
     RC result = readRecord(fileHandle, recordDescriptor, rid, record);
     if (result != SUCCESS)
+    {
+        free(record);
+        free(nullFlags);
         return result;
+    }
     memcpy(nullFlags, record, nullFieldSize);
     offset += nullFieldSize;
     for (Attribute attr : recordDescriptor)
@@ -453,6 +457,8 @@ RC RecordBasedFileManager::readAttribute(FileHandle &fileHandle, const vector<At
             {
                 unsigned char nullFlag = 1 << 7;
                 memcpy(data, &nullFlag, sizeof(unsigned char));
+                free(record);
+                free(nullFlags);
                 return SUCCESS;
             }
             //Otherwise increment fieldPosition and continue
@@ -470,6 +476,8 @@ RC RecordBasedFileManager::readAttribute(FileHandle &fileHandle, const vector<At
                 memcpy(data, &nullFlag, sizeof(unsigned char));
                 memcpy((char *)data + sizeof(unsigned char), (char *)record + offset, sizeof(uint32_t));
                 offset += sizeof(uint32_t);
+                free(record);
+                free(nullFlags);
                 return SUCCESS;
             }
             else
@@ -490,6 +498,8 @@ RC RecordBasedFileManager::readAttribute(FileHandle &fileHandle, const vector<At
                 memcpy((char *)data + sizeof(unsigned char), &sizeOfString, sizeof(uint32_t));
                 memcpy((char *)data + sizeof(unsigned char) + sizeof(uint32_t), (char *)record + offset, sizeOfString);
                 offset += sizeOfString;
+                free(record);
+                free(nullFlags);
                 return SUCCESS;
             }
             else
