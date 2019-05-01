@@ -1110,6 +1110,20 @@ RC RBFM_ScanIterator::projectRecord(const void *data_og, const vector<Attribute>
     return SUCCESS;
 }
 
+RC RBFM_ScanIterator::reset()
+{
+    if (!paramsLoaded_)
+        return RBFM_SI_UNLOADED;
+    if (iteratorClosed_)
+        return RBFM_SI_CLOSED;
+
+    // Start scanning from the beginning.
+    lastRID_.pageNum = 0;
+    lastRID_.slotNum = 0;
+    lastRIDInitialized_ = true;
+    return SUCCESS;
+}
+
 uint32_t getForwardingMask(const SlotDirectoryRecordEntry recordEntry)
 {
     const auto nbits_length = sizeof(recordEntry.length) * CHAR_BIT;

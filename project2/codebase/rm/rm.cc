@@ -194,22 +194,40 @@ Table *RelationManager::getTableFromCatalog(const string &tableName, RID &rid)
     _rbfm->scan(tableCatalogFile, tableCatalogAttributes, "table-name", CompOp::EQ_OP, (void *) tableName.c_str(), attrList, tableCatalogIterator);
     void *data = malloc(PAGE_SIZE);
     auto rc = tableCatalogIterator.getNextRecord(rid, data);
+    tableCatalogIterator.reset();
     if (rc == RBFM_EOF)
-    {
-        tableCatalogIterator.close();
         return nullptr;
-    }
-    tableCatalogIterator.close();
-    int tableId = 0;
+
     int offset = 0;
-    int sizeOfFileName = 0;
-    memcpy(&tableId, data, sizeof(uint32_t));
+
+    // Skip over initial null byte.
+    offset += 1;
+
+    // TableID
+    int tableId = 0;
+    memcpy(&tableId, (char *) data + offset, sizeof(uint32_t));
     offset += sizeof(uint32_t);
+
+    // TableName size
+    int tableNameSize = 0;
+    memcpy(&tableNameSize, (char *) data + offset, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+
+    // TableName value
+    offset += tableNameSize;
+
+    // FileName size
+    int sizeOfFileName = 0;
     memcpy(&sizeOfFileName, (char *)data + offset, sizeof(uint32_t));
     offset += sizeof(uint32_t);
+
+    // FileName value
     char fileName[sizeOfFileName + 1];
-    memcpy(&fileName, (char *)data + offset, sizeOfFileName);
+    memcpy(fileName, (char *)data + offset, sizeOfFileName);
+    offset += sizeOfFileName;
     fileName[sizeOfFileName] = '\0';
+
+
     returnTable->tableName = tableName;
     returnTable->fileName = fileName;
     returnTable->tableId = tableId;
@@ -258,7 +276,6 @@ RC RelationManager::deleteTable(const string &tableName)
     if (table == nullptr)
         return -1;
 
-    cout << "table-id " << table->tableId << "\n";
     RC result = _rbfm->destroyFile(table->fileName);
     if (result != SUCCESS)
         return result;
@@ -267,37 +284,63 @@ RC RelationManager::deleteTable(const string &tableName)
     if (tableId < 0)
         return -1;
     FileHandle tableCatalogFile;
-    _rbfm->openFile(tableCatalogName + fileSuffix, tableCatalogFile);
 
-    _rbfm->deleteRecord(tableCatalogFile, tableCatalogAttributes, rid);
-    _rbfm->closeFile(tableCatalogFile);
-    RM_ScanIterator columnCatalogIterator;
+    result = _rbfm->openFile(tableCatalogName + fileSuffix, tableCatalogFile);
+    if (result != SUCCESS)
+        return result;
+
+    result = _rbfm->deleteRecord(tableCatalogFile, tableCatalogAttributes, rid);
+    if (result != SUCCESS)
+        return result;
+
+    result = _rbfm->closeFile(tableCatalogFile);
+    if (result != SUCCESS)
+        return result;
+
     FileHandle columnCatalogFile;
-    _rbfm->openFile(columnCatalogName + fileSuffix, columnCatalogFile);
+    result = _rbfm->openFile(columnCatalogName + fileSuffix, columnCatalogFile);
+    if (result != SUCCESS)
+        return result;
+
     //We only care about RID so returned attributes isn't important
+    RM_ScanIterator columnCatalogIterator;
     vector<string> returnAttrList;
     returnAttrList.push_back("column-position");
-    scan(columnCatalogName, "table-id", CompOp::EQ_OP, &tableId, returnAttrList, columnCatalogIterator);
-    int columnPosition;
-    while (columnCatalogIterator.getNextTuple(rid, &columnPosition) != RM_EOF)
+    result = scan(columnCatalogName, "table-id", CompOp::EQ_OP, &tableId, returnAttrList, columnCatalogIterator);
+    if (result != SUCCESS && result != RBFM_EOF)
+        return result;
+
+    //int columnPosition;
+    void *data = malloc(PAGE_SIZE);
+    while (true)
     {
-        _rbfm->deleteRecord(columnCatalogFile, columnCatalogAttributes, rid);
+        result = columnCatalogIterator.getNextTuple(rid, data);
+        if (result != SUCCESS && result != RBFM_EOF) // Some error.
+            return result;
+
+        if (result == RBFM_EOF) // Base case: no more attributes to delete.
+        {
+            _rbfm->closeFile(columnCatalogFile);
+            return SUCCESS;
+        }
+
+        auto deleted = _rbfm->deleteRecord(columnCatalogFile, columnCatalogAttributes, rid);
+        if (deleted != SUCCESS)
+            return deleted;
     }
-    _rbfm->closeFile(columnCatalogFile);
 
     /*
     result = _rbfm->destroyFile(table->tableName + fileSuffix);
     if (result != SUCCESS)
         return result;
     */
-
-    return SUCCESS;
 }
 
 RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &attrs)
 {
     if (!catalogExists())
         return CATALOG_DNE;
+
     RID temp;
     Table *table = getTableFromCatalog(tableName, temp);
     if (table == nullptr)
@@ -305,45 +348,73 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
         return TABLE_DNE;
     }
     table->tableName = tableName;
+
     vector<string> columnAttributeNames;
     for (Attribute attr : columnCatalogAttributes)
     {
         columnAttributeNames.push_back(attr.name);
     }
-    RBFM_ScanIterator rbfmi;
+
     FileHandle columnCatalogFile;
-    _rbfm->openFile(columnTable->fileName, columnCatalogFile);
-    _rbfm->scan(columnCatalogFile, columnCatalogAttributes, "table-id", CompOp::EQ_OP, &table->tableId, columnAttributeNames, rbfmi);
+    RC result = _rbfm->openFile(columnTable->fileName, columnCatalogFile);
+    if (result != SUCCESS)
+        return result;
+
+    RBFM_ScanIterator rbfmi;
+    result = _rbfm->scan(columnCatalogFile, columnCatalogAttributes, "table-id", CompOp::EQ_OP, &table->tableId, columnAttributeNames, rbfmi);
+    if (result != SUCCESS)
+        return result;
+
     RID rid;
     void *data = malloc(PAGE_SIZE);
-    while (rbfmi.getNextRecord(rid, data) != RBFM_EOF)
+    while (true)
     {
-        //TODO: check if data is in correct format
+        result = rbfmi.getNextRecord(rid, data); 
+        if (result != SUCCESS && result != RBFM_EOF) // Error.
+            return result;
+
+        if (result == RBFM_EOF) // Base case: no more matching records.
+        {
+            _rbfm->closeFile(columnCatalogFile);
+            free(data);
+            if (attrs.empty())
+                return -1;
+            return SUCCESS;
+        }
+
         Attribute toAdd;
         int offset = 0;
-        //skip table-id and
+
+        // Skip null byte.
+        offset += 1;
+
+        // Skip table ID.
         offset += sizeof(uint32_t);
+
+        // Column name length.
         int attrNameLength = 0;
         memcpy(&attrNameLength, (char *)data + offset, sizeof(uint32_t));
         offset += sizeof(uint32_t);
-        char attrName[attrNameLength];
-        memcpy(&attrName, data, attrNameLength);
+
+        // Column name value.
+        char attrName[attrNameLength + 1];
+        memcpy(&attrName, (char *) data + offset, attrNameLength);
         offset += attrNameLength;
+        attrName[attrNameLength] = '\0';
         toAdd.name = attrName;
+
+        // Column type.
         int type = 0;
-        memcpy(&type, data, sizeof(uint32_t));
+        memcpy(&type, (char *) data + offset, sizeof(uint32_t));
         offset += sizeof(uint32_t);
         toAdd.type = (AttrType)type;
+
+        // Column length.
         int length = 0;
-        memcpy(&length, data, sizeof(uint32_t));
+        memcpy(&length, (char *) data + offset, sizeof(uint32_t));
         toAdd.length = length;
         attrs.push_back(toAdd);
     }
-    _rbfm->closeFile(columnCatalogFile);
-    free(data);
-    if (attrs.empty())
-        return -1;
-    return SUCCESS;
 }
 
 RC RelationManager::insertTuple(const string &tableName, const void *data, RID &rid)
@@ -503,3 +574,14 @@ RC RM_ScanIterator::getNextTuple(RID &rid, void *data)
         return RM_EOF;
     return result;
 }
+
+RC RM_ScanIterator::close()
+{
+    return underlyingIterator.close();
+}
+
+RC RM_ScanIterator::reset()
+{
+    return underlyingIterator.reset();
+}
+
