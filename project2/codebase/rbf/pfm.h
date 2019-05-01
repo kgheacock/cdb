@@ -66,6 +66,7 @@ public:
 
 private:
     FILE *_fd;
+    string _fname;
 
     // Private helper methods
     void setfd(FILE *fd);

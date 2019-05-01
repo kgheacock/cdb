@@ -1,6 +1,9 @@
 #include <cstdio>
 #include <string>
 
+#include <cerrno>
+#include <cstdio>
+
 #include <sys/stat.h>
 
 #include "pfm.h"
@@ -79,6 +82,7 @@ RC PagedFileManager::openFile(const string &fileName, FileHandle &fileHandle)
         return PFM_OPEN_FAILED;
 
     fileHandle.setfd(pFile);
+    fileHandle._fname = fileName.c_str();
 
     return SUCCESS;
 }
@@ -96,6 +100,7 @@ RC PagedFileManager::closeFile(FileHandle &fileHandle)
     fclose(pFile);
 
     fileHandle.setfd(NULL);
+    fileHandle._fname = "";
 
     return SUCCESS;
 }
@@ -106,6 +111,7 @@ FileHandle::FileHandle()
 	writePageCounter = 0;
 	appendPageCounter = 0;
 	_fd = NULL;
+    _fname = "";
 }
 
 
@@ -178,9 +184,17 @@ unsigned FileHandle::getNumberOfPages()
 {
     // Use stat to get the file size
     struct stat sb;
-    if (fstat(fileno(_fd), &sb) != 0)
+    //auto no = fileno(_fd);
+    //auto stat_rc = fstat(no, &sb);
+    auto stat_rc = stat(_fname.c_str(), &sb);
+    if (stat_rc != 0)
+    {
         // On error, return 0
+        char prefix[75];
+        snprintf(prefix, 75, "[pfm.cc:getNumberOfPages {_fname = %s }]", _fname.c_str());
+        perror(prefix);
         return 0;
+    }
     // Filesize is always PAGE_SIZE * number of pages
     return sb.st_size / PAGE_SIZE;
 }
