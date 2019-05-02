@@ -223,14 +223,6 @@ RC RelationManager::createCatalog()
     if (result != SUCCESS)
         return result; //propogate error
 
-    //Free table objects created in constructor
-    delete tableTable;
-    delete columnTable;
-
-    //Create table objects
-    tableTable = new Table(0, tableCatalogName, tableCatalogName + fileSuffix);
-    columnTable = new Table(1, columnCatalogName, columnCatalogName + fileSuffix);
-
     addTableToCatalog(tableTable, tableCatalogAttributes);
     addTableToCatalog(columnTable, columnCatalogAttributes);
     catalogCreated = 1;
