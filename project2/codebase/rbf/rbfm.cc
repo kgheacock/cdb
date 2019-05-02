@@ -980,9 +980,7 @@ recordMatches:
                 int projectedSize;
                 void *projectedRecord;
                 vector<Attribute> projectedRecordDescriptor;
-                rc = projectRecord(record, recordDescriptor_,
-                                   projectedRecord, projectedRecordDescriptor, projectedSize,
-                                   attributeNames_);
+                rc = projectRecord(record, recordDescriptor_, projectedRecord, projectedRecordDescriptor, projectedSize, attributeNames_);
 
                 memcpy(data, projectedRecord, projectedSize);
 
@@ -1106,18 +1104,20 @@ RC RBFM_ScanIterator::projectRecord(const void *data_og, const vector<Attribute>
             }
         }
 
+        auto currentNullIndicatorField_pj = nullIndicatorField_pj;
         if (shouldProject)
         {
             recordDescriptor_pj.push_back(recordDescriptor_og[i]);
+            nullIndicatorField_pj++;
         }
+
 
         bool isNull = rbfm_->fieldIsNull(nullIndicator_og, i);
         if (isNull)
         {
             if (shouldProject)
             {
-                rbfm_->setFieldToNull(nullIndicator_pj, nullIndicatorField_pj);
-                nullIndicatorField_pj++;
+                rbfm_->setFieldToNull(nullIndicator_pj, currentNullIndicatorField_pj);
             }
             continue;
         }

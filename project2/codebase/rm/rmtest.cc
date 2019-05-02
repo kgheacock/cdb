@@ -1019,6 +1019,183 @@ RC TEST_RM_15(const string &tableName)
     return success;
 }
 
+RC TEST_RM_16(const string &tableName)
+{
+    // Functions Tested:
+    // 1. addAttribute
+    // 2. Conditional scan
+    cout << endl << "***** In RM Test Case 16 *****" << endl;
+
+    RID rid;
+    int tupleSize = 0;
+    int numTuples = 500;
+    void *tuple;
+    void *returnedData = malloc(200);
+    int ageVal = 25;
+    int age = 0;
+
+    RID rids[numTuples];
+    vector<char *> tuples;
+
+    // GetAttributes
+    vector<Attribute> attrs;
+    RC rc = rm->getAttributes(tableName, attrs);
+    assert(rc == success && "RelationManager::getAttributes() should not fail.");
+
+    int nullAttributesIndicatorActualSize = getActualByteForNullsIndicator(attrs.size());
+    unsigned char *nullsIndicator = (unsigned char *) malloc(nullAttributesIndicatorActualSize);
+	memset(nullsIndicator, 0, nullAttributesIndicatorActualSize);
+
+    for(int i = 0; i < numTuples; i++)
+    {
+        tuple = malloc(100);
+
+        // Insert Tuple
+        float height = (float)i;
+
+        age = (rand()%20) + 15;
+
+        prepareTuple(attrs.size(), nullsIndicator, 6, "Tester", age, height, 123, tuple, &tupleSize);
+        rc = rm->insertTuple(tableName, tuple, rid);
+        assert(rc == success && "RelationManager::insertTuple() should not fail.");
+
+        rids[i] = rid;
+        free(tuple);
+    }
+
+    Attribute newAttr;
+    newAttr.name = "Level";
+    newAttr.type = TypeInt;
+    newAttr.length = (AttrLength)4;
+    rc = rm->addAttribute(tableName, newAttr);
+    assert(rc == SUCCESS && "addAttribute should not fail.");
+
+    // Set up the iterator
+    RM_ScanIterator rmsi;
+    string attr = "Age";
+    vector<string> attributes;
+    attributes.push_back(attr);
+    attributes.push_back(newAttr.name); // Project with new attr.  This should be null on all scan matches.
+    rc = rm->scan(tableName, attr, GT_OP, &ageVal, attributes, rmsi);
+    assert(rc == success && "RelationManager::scan() should not fail.");
+
+    while(rmsi.getNextTuple(rid, returnedData) != RM_EOF)
+    {
+        char *nullIndicator = (char *) returnedData;
+        int newAttrPosition = 1;
+        int indicatorIndex = newAttrPosition / CHAR_BIT;
+        int indicatorMask = 1 << (CHAR_BIT - 1 - (newAttrPosition % CHAR_BIT));
+        bool newAttrIsNull = (nullIndicator[indicatorIndex] & indicatorMask) != 0;
+        assert(newAttrIsNull && "New added attribute should be null.");
+
+    	age = *(int *)((char *)returnedData+1);
+    	if (age <= ageVal) {
+    		cout << "Returned value from a scan is not correct." << endl;
+    	    cout << "***** [FAIL] Test Case 13 Failed *****" << endl << endl;
+    	    rmsi.close();
+    	    free(returnedData);
+            free(nullsIndicator);
+    	    return -1;
+    	}
+    }
+    rmsi.close();
+    free(returnedData);
+    free(nullsIndicator);
+
+    cout << "***** Test Case 16 Finished. The result will be examined. *****" << endl << endl;
+    return success;
+}
+
+RC TEST_RM_16b(const string &tableName)
+{
+    // Functions Tested:
+    // 1. addAttribute
+    // 2. Conditional scan
+    cout << endl << "***** In RM Test Case 16b *****" << endl;
+
+    Attribute newAttr;
+    newAttr.name = "Level";
+    newAttr.type = TypeInt;
+    newAttr.length = (AttrLength)4;
+    RC rc = rm->addAttribute(tableName, newAttr);
+    assert(rc == SUCCESS && "addAttribute should not fail.");
+
+    RID rid;
+    int tupleSize = 0;
+    int numTuples = 500;
+    void *tuple;
+    void *returnedData = malloc(200);
+    int ageVal = 25;
+    int age = 0;
+    const int levelVal = 3;
+
+    RID rids[numTuples];
+    vector<char *> tuples;
+
+    // GetAttributes
+    vector<Attribute> attrs;
+    rc = rm->getAttributes(tableName, attrs);
+    assert(rc == success && "RelationManager::getAttributes() should not fail.");
+
+    int nullAttributesIndicatorActualSize = getActualByteForNullsIndicator(attrs.size());
+    unsigned char *nullsIndicator = (unsigned char *) malloc(nullAttributesIndicatorActualSize);
+	memset(nullsIndicator, 0, nullAttributesIndicatorActualSize);
+
+    for(int i = 0; i < numTuples; i++)
+    {
+        tuple = malloc(100);
+
+        // Insert Tuple
+        float height = (float)i;
+
+        age = (rand()%20) + 15;
+
+        prepareTupleWithLevel(attrs.size(), nullsIndicator, 6, "Tester", age, height, 123, levelVal, tuple, &tupleSize);
+        rc = rm->insertTuple(tableName, tuple, rid);
+        assert(rc == success && "RelationManager::insertTuple() should not fail.");
+
+        rids[i] = rid;
+        free(tuple);
+    }
+
+    // Set up the iterator
+    RM_ScanIterator rmsi;
+    string attr = "Age";
+    vector<string> attributes;
+    attributes.push_back(attr);
+    attributes.push_back(newAttr.name); // Project with new attr.  This should be null on all scan matches.
+    rc = rm->scan(tableName, attr, GT_OP, &ageVal, attributes, rmsi);
+    assert(rc == success && "RelationManager::scan() should not fail.");
+
+    while(rmsi.getNextTuple(rid, returnedData) != RM_EOF)
+    {
+        char *nullIndicator = (char *) returnedData;
+        int newAttrPosition = 1;
+        int indicatorIndex = newAttrPosition / CHAR_BIT;
+        int indicatorMask = 1 << (CHAR_BIT - 1 - (newAttrPosition % CHAR_BIT));
+        bool newAttrIsNull = (nullIndicator[indicatorIndex] & indicatorMask) != 0;
+        assert(!newAttrIsNull && "New added attribute should not be null.");
+
+    	age = *(int *)((char *)returnedData+1);
+    	if (age <= ageVal) {
+    		cout << "Returned value from a scan is not correct." << endl;
+    	    cout << "***** [FAIL] Test Case 13 Failed *****" << endl << endl;
+    	    rmsi.close();
+    	    free(returnedData);
+            free(nullsIndicator);
+    	    return -1;
+    	}
+        int level = *(int *)((char *)returnedData+1+sizeof(int)); // Skip over null indicator and age.
+        assert(level == levelVal && "Level should match what was inserted.");
+    }
+    rmsi.close();
+    free(returnedData);
+    free(nullsIndicator);
+
+    cout << "***** Test Case 16b Finished. The result will be examined. *****" << endl << endl;
+    return success;
+}
+
 int main()
 {
     // Get Attributes
@@ -1104,6 +1281,18 @@ int main()
     // Test Catalog Information
     rcmain = TEST_RM_15(catalog_table_name_columns);
     assert(rcmain == success && "[FAILED] RM test 15");
+
+    // [addAttribute] Scan RECORDS that were INSERTED BEFORE the addition.
+    rcmain = createTable("tbl_b_employee6");
+    assert(rcmain == success && "[FAILED] createTable for RM test 16 preperation");
+    rcmain = TEST_RM_16("tbl_b_employee6");
+    assert(rcmain == success && "[FAILED] RM test 16");
+
+    // [addAttribute] Scan RECORDS that were INSERTED AFTER the addition.
+    rcmain = createTable("tbl_b_employee7");
+    assert(rcmain == success && "[FAILED] createTable for RM test 16b preperation");
+    rcmain = TEST_RM_16b("tbl_b_employee7");
+    assert(rcmain == success && "[FAILED] RM test 16b");
     
     return 0;
 }

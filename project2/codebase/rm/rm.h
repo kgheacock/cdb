@@ -77,6 +77,12 @@ public:
 
   RC readAttribute(const string &tableName, const RID &rid, const string &attributeName, void *data);
 
+  // Advanced requirement.
+  RC addAttribute(const string &tableName, const Attribute &attr);
+
+  // Advanced requirement.
+  RC dropAttribute(const string &tableName, const string &attributeName);
+
   // Scan returns an iterator to allow the caller to go through the results one by one.
   // Do not store entire results in the scan iterator.
   RC scan(const string &tableName,
@@ -104,6 +110,7 @@ private:
   vector<Attribute> columnCatalogAttributes;
   void addTableToCatalog(Table *table, const vector<Attribute> &attrs);
   void addColumnsToCatalog(const vector<Attribute> &attrs, int tableId);
+  void addColumnToCatalog(const Attribute attr, const int tableId, const int columnPosition, FileHandle &columnCatalogFile);
   bool catalogExists();
   Table *getTableFromCatalog(const string &tableName, RID &rid);
 

@@ -86,6 +86,70 @@ void prepareTuple(int attributeCount, unsigned char *nullAttributesIndicator, co
     *tupleSize = offset;
 }
 
+// Function to prepare the data in the correct form to be inserted/read/updated
+void prepareTupleWithLevel(int attributeCount, unsigned char *nullAttributesIndicator, const int nameLength, const string &name, const int age, const float height, const int salary, const int level, void *buffer, int *tupleSize)
+{
+    int offset = 0;
+
+	// Null-indicators
+    bool nullBit = false;
+    int nullAttributesIndicatorActualSize = getActualByteForNullsIndicator(attributeCount);
+
+	// Null-indicator for the fields
+    memcpy((char *)buffer + offset, nullAttributesIndicator, nullAttributesIndicatorActualSize);
+	offset += nullAttributesIndicatorActualSize;
+
+	// Beginning of the actual data    
+	// Note that the left-most bit represents the first field. Thus, the offset is 7 from right, not 0.
+	// e.g., if a tuple consists of four attributes and they are all nulls, then the bit representation will be: [11110000]
+
+	// Is the name field not-NULL?
+	nullBit = nullAttributesIndicator[0] & (1 << 7);
+
+	if (!nullBit) {
+		memcpy((char *)buffer + offset, &nameLength, sizeof(int));
+		offset += sizeof(int);
+		memcpy((char *)buffer + offset, name.c_str(), nameLength);
+		offset += nameLength;
+	}
+	
+	// Is the age field not-NULL?
+	nullBit = nullAttributesIndicator[0] & (1 << 6);
+
+	if (!nullBit) {
+		memcpy((char *)buffer + offset, &age, sizeof(int));
+		offset += sizeof(int);
+	}
+	
+	
+	// Is the height field not-NULL?
+	nullBit = nullAttributesIndicator[0] & (1 << 5);
+
+	if (!nullBit) {
+		memcpy((char *)buffer + offset, &height, sizeof(float));
+		offset += sizeof(float);
+	}
+	
+	
+	// Is the salary field not-NULL?
+	nullBit = nullAttributesIndicator[0] & (1 << 4);
+
+	if (!nullBit) {
+		memcpy((char *)buffer + offset, &salary, sizeof(int));
+		offset += sizeof(int);
+	}
+
+	// Is the level field not-NULL?
+	nullBit = nullAttributesIndicator[0] & (1 << 3);
+
+	if (!nullBit) {
+		memcpy((char *)buffer + offset, &level, sizeof(int));
+		offset += sizeof(int);
+	}
+	
+    *tupleSize = offset;
+}
+
 // Function to get the data in the correct form to be inserted/read after adding the attribute ssn
 void prepareTupleAfterAdd(int attributeCount, unsigned char *nullAttributesIndicator, const int nameLength, const string &name, const int age, const float height, const int salary, const int ssn, void *buffer, int *tupleSize)
 {

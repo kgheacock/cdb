@@ -164,6 +164,7 @@ bool RelationManager::catalogExists()
     catalogCreated = 1;
     return true;
 }
+
 void RelationManager::addColumnsToCatalog(const vector<Attribute> &attrs, int tableId)
 {
     FileHandle catalogFile;
@@ -172,47 +173,53 @@ void RelationManager::addColumnsToCatalog(const vector<Attribute> &attrs, int ta
     int colPos = 1;
     for (Attribute attr : attrs)
     {
-        void *buffer = malloc(PAGE_SIZE);
-        int offset = 0;
-
-        // Null fields.
-        unsigned char nullFields = 0;
-        memcpy((char *)buffer + offset, &nullFields, 1);
-        offset += 1;
-
-        // TableId
-        memcpy((char *)buffer + offset, &tableId, sizeof(uint32_t));
-        offset += sizeof(uint32_t);
-
-        // Column name length
-        int fieldNameLength = attr.name.length();
-        memcpy((char *)buffer + offset, &fieldNameLength, sizeof(uint32_t));
-        offset += sizeof(uint32_t);
-
-        // Column name value
-        const char *colName = attr.name.c_str();
-        memcpy((char *)buffer + offset, colName, fieldNameLength);
-        offset += fieldNameLength;
-
-        // Column type
-        memcpy((char *)buffer + offset, &attr.type, sizeof(uint32_t));
-        offset += sizeof(uint32_t);
-
-        // Column length
-        memcpy((char *)buffer + offset, &attr.length, sizeof(uint32_t));
-        offset += sizeof(uint32_t);
-
-        // Column position
-        memcpy((char *)buffer + offset, &colPos, sizeof(uint32_t));
-
-
-        RID temp;
-        _rbfm->insertRecord(catalogFile, columnCatalogAttributes, buffer, temp);
+        addColumnToCatalog(attr, tableId, colPos, catalogFile);
         colPos++;
-        free(buffer);
     }
     _rbfm->closeFile(catalogFile);
 }
+
+// Assumes that the caller opens and manages the FileHandle to the catalog.
+void RelationManager::addColumnToCatalog(const Attribute attr, const int tableId, const int columnPosition, FileHandle &columnCatalogFile)
+{
+    void *buffer = malloc(PAGE_SIZE);
+    int offset = 0;
+
+    // Null fields.
+    unsigned char nullFields = 0;
+    memcpy((char *)buffer + offset, &nullFields, 1);
+    offset += 1;
+
+    // TableId
+    memcpy((char *)buffer + offset, &tableId, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+
+    // Column name length
+    int fieldNameLength = attr.name.length();
+    memcpy((char *)buffer + offset, &fieldNameLength, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+
+    // Column name value
+    const char *colName = attr.name.c_str();
+    memcpy((char *)buffer + offset, colName, fieldNameLength);
+    offset += fieldNameLength;
+
+    // Column type
+    memcpy((char *)buffer + offset, &attr.type, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+
+    // Column length
+    memcpy((char *)buffer + offset, &attr.length, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+
+    // Column position
+    memcpy((char *)buffer + offset, &columnPosition, sizeof(uint32_t));
+
+    RID temp;
+    _rbfm->insertRecord(columnCatalogFile, columnCatalogAttributes, buffer, temp);
+    free(buffer);
+}
+
 RC RelationManager::createCatalog()
 {
     //Check if Catalog files exist and if so return error, if not allocate
@@ -676,6 +683,35 @@ RC RelationManager::readAttribute(const string &tableName, const RID &rid, const
 
     result = _rbfm->closeFile(tableFile);
     return result;
+}
+
+RC RelationManager::addAttribute(const string &tableName, const Attribute &attr)
+{
+    RID temp;
+    Table *table = getTableFromCatalog(tableName, temp);
+    if (table == nullptr)
+        return -1;
+    const int tableId = table->tableId;
+    delete table;
+
+    vector<Attribute> existingAttrs;
+    RC result = getAttributes(tableName, existingAttrs);
+    if (result != SUCCESS)
+        return result;
+    const int nextColumnPosition = existingAttrs.size() + 1;
+
+    FileHandle columnCatalogFile;
+    result = _rbfm->openFile(columnCatalogName + fileSuffix, columnCatalogFile);
+    if (result != SUCCESS)
+        return result;
+
+    addColumnToCatalog(attr, tableId, nextColumnPosition, columnCatalogFile);
+
+    result = _rbfm->closeFile(columnCatalogFile);
+    if (result != SUCCESS)
+        return result;
+
+    return SUCCESS;
 }
 
 RC RelationManager::scan(const string &tableName,
