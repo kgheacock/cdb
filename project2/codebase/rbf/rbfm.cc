@@ -915,7 +915,10 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data)
             return RBFM_MALLOC_FAILED;
         rc = fileHandle_.readPage(page_i, pageData);
         if (rc != SUCCESS)
+        {
+            free(pageData);
             return rc;
+        }
         SlotDirectoryHeader header = rbfm_->getSlotDirectoryHeader(pageData);
 
         const uint32_t startingSlot = lastRIDInitialized_ && page_i == lastRID_.pageNum ? lastRID_.slotNum + 1 : 0;
@@ -934,7 +937,11 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data)
             void *record = calloc(PAGE_SIZE, sizeof(uint8_t));
             rc = rbfm_->readRecord(fileHandle_, recordDescriptor_, rid, record);
             if (rc != SUCCESS)
+            {
+                free(record);
+                free(pageData);
                 return rc;
+            }
 
             bool recordMatchesSearchCriteria = false; // Assume no match until proven otherwise.
             if (compOp_ == NO_OP)
@@ -943,7 +950,11 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data)
             void *value;
             rc = getValueFromRecord(record, recordDescriptor_, conditionAttribute_.name, value);
             if (rc != SUCCESS)
+            {
+                free(record);
+                free(pageData);
                 return rc;
+            }
             recordMatchesSearchCriteria = evalCompOp(value, value_, compOp_, conditionAttribute_.type);
             free(value);
 
@@ -980,9 +991,10 @@ recordMatches:
 // TODO: Think about this some more.  Not sure what else we may need to do here.
 RC RBFM_ScanIterator::close()
 {
-    auto rc = rbfm_->closeFile(fileHandle_);
+    /*auto rc = rbfm_->closeFile(fileHandle_);
     if (rc != SUCCESS)
         return rc;
+    */
 
     iteratorClosed_ = true;
     return SUCCESS;

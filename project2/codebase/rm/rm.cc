@@ -201,6 +201,7 @@ Table *RelationManager::getTableFromCatalog(const string &tableName, RID &rid)
     if (rc == RBFM_EOF)
     {
         free(data);
+        _rbfm->closeFile(tableCatalogFile);
         return nullptr;
     }
 
@@ -233,13 +234,11 @@ Table *RelationManager::getTableFromCatalog(const string &tableName, RID &rid)
     offset += sizeOfFileName;
     fileName[sizeOfFileName] = '\0';
 
-
     returnTable->tableName = tableName;
     returnTable->fileName = fileName;
     returnTable->tableId = tableId;
     _rbfm->closeFile(tableCatalogFile);
     free(data);
-
     return returnTable;
 }
 
@@ -330,6 +329,7 @@ RC RelationManager::deleteTable(const string &tableName)
         {
             free(data);
             columnCatalogIterator.close();
+            result = _rbfm->closeFile(columnCatalogFile);
             return result;
         }
 
@@ -337,7 +337,8 @@ RC RelationManager::deleteTable(const string &tableName)
         {
             free(data);
             columnCatalogIterator.close();
-            return _rbfm->closeFile(columnCatalogFile);
+            result = _rbfm->closeFile(columnCatalogFile);
+            return result;
         }
 
         auto deleted = _rbfm->deleteRecord(columnCatalogFile, columnCatalogAttributes, rid);
@@ -345,6 +346,7 @@ RC RelationManager::deleteTable(const string &tableName)
         {
             free(data);
             columnCatalogIterator.close();
+            result = _rbfm->closeFile(columnCatalogFile);
             return deleted;
         }
     }
@@ -392,7 +394,10 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
     {
         result = rbfmi.getNextRecord(rid, data); 
         if (result != SUCCESS && result != RBFM_EOF) // Error.
+        {
+            _rbfm->closeFile(columnCatalogFile);
             return result;
+        }
 
         if (result == RBFM_EOF) // Base case: no more matching records.
         {
@@ -448,19 +453,30 @@ RC RelationManager::insertTuple(const string &tableName, const void *data, RID &
     Table *table = getTableFromCatalog(tableName, temp);
     if (table == nullptr)
         return TABLE_DNE;
+    string fileName = table->fileName;
+    delete table;
 
     FileHandle fileHandle;
-    RC result = _rbfm->openFile(table->fileName, fileHandle);
+    RC result = _rbfm->openFile(fileName, fileHandle);
     if (result != SUCCESS)
         return result;
-    delete table;
 
     vector<Attribute> attributes;
     result = getAttributes(tableName, attributes);
     if (result != SUCCESS)
+    {
+        _rbfm->closeFile(fileHandle);
         return result;
+    }
 
     result = _rbfm->insertRecord(fileHandle, attributes, data, rid);
+    if (result != SUCCESS)
+    { 
+        _rbfm->closeFile(fileHandle);
+        return result;
+    }
+
+    result = _rbfm->closeFile(fileHandle);
     return result;
 }
 
@@ -479,16 +495,24 @@ RC RelationManager::deleteTuple(const string &tableName, const RID &rid)
     RC result = _rbfm->openFile(table->fileName, fileHandle);
     delete table;
     if (result != SUCCESS)
-    {
         return result;
-    }
 
     vector<Attribute> attributes;
     result = getAttributes(tableName, attributes);
     if (result != SUCCESS)
+    {
+        _rbfm->closeFile(fileHandle);
         return result;
+    }
 
     result = _rbfm->deleteRecord(fileHandle, attributes, rid);
+    if (result != SUCCESS)
+    {
+        _rbfm->closeFile(fileHandle);
+        return result;
+    }
+
+    result = _rbfm->closeFile(fileHandle);
     return result;
 }
 
@@ -512,9 +536,20 @@ RC RelationManager::updateTuple(const string &tableName, const void *data, const
     vector<Attribute> attributes;
     result = getAttributes(tableName, attributes);
     if (result != SUCCESS)
+    {
+        _rbfm->closeFile(fileHandle);
         return result;
+    }
 
     result = _rbfm->updateRecord(fileHandle, attributes, data, rid);
+    if (result != SUCCESS)
+    {
+        _rbfm->closeFile(fileHandle);
+        return result;
+    }
+
+
+    result = _rbfm->closeFile(fileHandle);
     return result;
 }
 
@@ -530,19 +565,29 @@ RC RelationManager::readTuple(const string &tableName, const RID &rid, void *dat
     Table *table = getTableFromCatalog(tableName, temp);
     if (table == nullptr)
         return TABLE_DNE;
+    string fileName = table->fileName;
+    delete table;
 
     FileHandle fileHandle;
-    RC result = _rbfm->openFile(table->fileName, fileHandle);
-    delete table;
+    RC result = _rbfm->openFile(fileName, fileHandle);
     if (result != SUCCESS)
         return result;
 
     vector<Attribute> attributes;
     result = getAttributes(tableName, attributes);
     if (result != SUCCESS)
+    {
+        _rbfm->closeFile(fileHandle);
         return result;
+    }
 
     result = _rbfm->readRecord(fileHandle, attributes, rid, data);
+    if (result != SUCCESS)
+    {
+        _rbfm->closeFile(fileHandle);
+        return result;
+    }
+    result = _rbfm->closeFile(fileHandle);
     return result;
 }
 
@@ -564,10 +609,22 @@ RC RelationManager::readAttribute(const string &tableName, const RID &rid, const
     Table *table = getTableFromCatalog(tableName, temp);
     if (table == nullptr)
         return TABLE_DNE;
+
     FileHandle tableFile;
-    _rbfm->openFile(table->fileName, tableFile);
+    RC result = _rbfm->openFile(table->fileName, tableFile);
+    if (result != SUCCESS)
+        return result;
+
     delete table;
-    RC result = _rbfm->readAttribute(tableFile, attrs, rid, attributeName, data);
+
+    result = _rbfm->readAttribute(tableFile, attrs, rid, attributeName, data);
+    if (result != SUCCESS)
+    {
+        _rbfm->closeFile(tableFile);
+        return result;
+    }
+
+    result = _rbfm->closeFile(tableFile);
     return result;
 }
 
@@ -587,15 +644,19 @@ RC RelationManager::scan(const string &tableName,
         return result;
 
     FileHandle tableToScanFile;
-    _rbfm->openFile(tableToScan->fileName, tableToScanFile);
+    result = _rbfm->openFile(tableToScan->fileName, tableToScanFile);
+    if (result != SUCCESS)
+        return result;
+
     delete tableToScan;
 
     RBFM_ScanIterator underlyingIterator;
     result = _rbfm->scan(tableToScanFile, scannedTableAttributes, conditionAttribute, compOp, value, attributeNames, underlyingIterator);
     if (result != SUCCESS)
         return result;
+
     rm_ScanIterator = RM_ScanIterator(underlyingIterator);
-    return SUCCESS;
+    return result;
 }
 
 RC RM_ScanIterator::getNextTuple(RID &rid, void *data)
@@ -608,6 +669,9 @@ RC RM_ScanIterator::getNextTuple(RID &rid, void *data)
 
 RC RM_ScanIterator::close()
 {
+    RC result = underlyingIterator.rbfm_->closeFile(underlyingIterator.fileHandle_);
+    if (result != SUCCESS)
+        return result;
     return underlyingIterator.close();
 }
 

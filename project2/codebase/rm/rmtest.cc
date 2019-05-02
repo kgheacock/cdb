@@ -532,6 +532,7 @@ RC TEST_RM_09(const string &tableName, vector<RID> &rids, vector<int> &sizes)
 
     free(tuple);
     free(returnedData);
+    free(nullsIndicator);
 
     cout << "***** Test Case 9 Finished. The result will be examined. *****" << endl << endl;
     
@@ -765,11 +766,13 @@ RC TEST_RM_13(const string &tableName)
     	    cout << "***** [FAIL] Test Case 13 Failed *****" << endl << endl;
     	    rmsi.close();
     	    free(returnedData);
+            free(nullsIndicator);
     	    return -1;
     	}
     }
     rmsi.close();
     free(returnedData);
+    free(nullsIndicator);
 
     cout << "***** Test Case 13 Finished. The result will be examined. *****" << endl << endl;
     
@@ -861,6 +864,7 @@ RC TEST_RM_13b(const string &tableName)
 				cout << "***** [FAIL] Test Case 13B Failed *****" << endl << endl;
 				rmsi.close();
 				free(returnedData);
+                free(suffix);
 				return -1;
 			}
 		} else {
@@ -869,11 +873,15 @@ RC TEST_RM_13b(const string &tableName)
 			cout << "***** [FAIL] Test Case 13B Failed *****" << endl << endl;
 			rmsi.close();
 			free(returnedData);
+            free(suffix);
 			return -1;
 		}
     }
     rmsi.close();
     free(returnedData);
+    free(suffix);
+    free(nullsIndicator);
+    free(nullsIndicatorWithNull);
 
 	rc = rm->deleteTable("tbl_b_employee5");
 	
