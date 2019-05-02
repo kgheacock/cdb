@@ -1,4 +1,5 @@
 #include "rm.h"
+#include <sys/stat.h>
 
 RelationManager *RelationManager::_rm = 0;
 RecordBasedFileManager *RelationManager::_rbfm = 0;
@@ -9,15 +10,65 @@ RelationManager *RelationManager::instance()
     {
         _rm = new RelationManager();
         _rbfm = RecordBasedFileManager::instance();
-        _rm->tableIndex = 0;
     }
     return _rm;
 }
 
+int RelationManager::getCurrentIndex()
+{
+    struct stat buf;
+    bool fileExists = stat(_fIndexName.c_str(), &buf) == 0;
+    bool mustCreateIndex = !fileExists;
+
+    RC rc;
+    int tableIndex;
+    if (mustCreateIndex)
+    {
+        tableIndex = 2;
+        _fIndex = fopen(_fIndexName.c_str(), "w+b");
+        rc = writeTableIndex(tableIndex);
+    }
+    else
+    {
+        _fIndex = fopen(_fIndexName.c_str(), "r+b");
+        rc = fread(&tableIndex, sizeof(tableIndex), 1, _fIndex) == 1 ? SUCCESS : -1;
+    }
+
+    if (rc != SUCCESS)
+        return -1;
+
+    bool isValidTableIndex = tableIndex >= 2;
+    return isValidTableIndex ? tableIndex : -1;
+}
+
+RC RelationManager::writeTableIndex(int newIndex)
+{
+    RC rc;
+
+    rc = fseek(_fIndex, 0, SEEK_SET);
+    if (rc != 0)
+        return -1;
+
+    rc = fwrite(&newIndex, sizeof(newIndex), 1, _fIndex);
+    if (rc != 1)
+        return -1;
+
+    rc = fflush(_fIndex);
+    if (rc != 0)
+        return -1;
+
+    rc = fseek(_fIndex, 0, SEEK_SET);
+    if (rc != 0)
+        return -1;
+
+    return SUCCESS;
+}
+
 int RelationManager::getNextIndex()
 {
-    ++tableIndex;
-    return tableIndex;
+    ++_tableIndex;
+    writeTableIndex(_tableIndex);
+    return _tableIndex;
 }
 
 RelationManager::RelationManager()
@@ -38,11 +89,14 @@ RelationManager::RelationManager()
 
     tableTable = new Table(0, tableCatalogName, tableCatalogName + fileSuffix);
     columnTable = new Table(1, columnCatalogName, columnCatalogName + fileSuffix);
+
+    _tableIndex = getCurrentIndex();
 }
 
 RelationManager::~RelationManager()
 {
 }
+
 void RelationManager::addTableToCatalog(Table *table, const vector<Attribute> &attrs)
 {
     FileHandle catalogFile;
@@ -172,9 +226,10 @@ RC RelationManager::createCatalog()
     //Free table objects created in constructor
     delete tableTable;
     delete columnTable;
+
     //Create table objects
-    tableTable = new Table(getNextIndex(), tableCatalogName, tableCatalogName + fileSuffix);
-    columnTable = new Table(getNextIndex(), columnCatalogName, columnCatalogName + fileSuffix);
+    tableTable = new Table(0, tableCatalogName, tableCatalogName + fileSuffix);
+    columnTable = new Table(1, columnCatalogName, columnCatalogName + fileSuffix);
 
     addTableToCatalog(tableTable, tableCatalogAttributes);
     addTableToCatalog(columnTable, columnCatalogAttributes);
