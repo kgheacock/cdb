@@ -257,6 +257,7 @@ Table *RelationManager::getTableFromCatalog(const string &tableName, RID &rid)
     {
         free(data);
         _rbfm->closeFile(tableCatalogFile);
+        delete returnTable;
         return nullptr;
     }
 
