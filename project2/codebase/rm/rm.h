@@ -12,6 +12,7 @@
 
 #define TABLE_DNE 8
 #define CATALOG_DNE 9
+#define INVALID_PERMISSIONS 10
 
 using namespace std;
 

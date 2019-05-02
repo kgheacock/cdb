@@ -322,7 +322,9 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
 
 RC RelationManager::deleteTable(const string &tableName)
 {
-    //TODO check to make sure column and table catalog aren't being deleted
+    if (tableName.compare(tableCatalogName) == 0 || tableName.compare(columnCatalogName) == 0)
+        return INVALID_PERMISSIONS;
+
     if (!catalogExists())
         return CATALOG_DNE;
     RID rid;
