@@ -30,6 +30,9 @@ bool evalCompOp(void *x, void *y, CompOp op, AttrType attrType)
     if (op == NO_OP)
         return true;
 
+    if (x == nullptr || y == nullptr)
+        return false;
+
     int ix, iy;
     float fx, fy;
     string sx, sy;
@@ -832,12 +835,9 @@ RC RBFM_ScanIterator::getValueFromRecord(void *data, const vector<Attribute> rec
 
     for (unsigned i = 0; i < (unsigned)recordDescriptor.size(); i++)
     {
-        // If the field is null, don't print it
         bool isNull = rbfm_->fieldIsNull(nullIndicator, i);
         if (isNull)
-        {
-            continue;
-        }
+            return RBFM_SI_NULL_VALUE;
 
         bool isTargetAttr = recordDescriptor[i].name.compare(targetAttrName) == 0;
 
@@ -943,20 +943,32 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data)
                 return rc;
             }
 
+
             bool recordMatchesSearchCriteria = false; // Assume no match until proven otherwise.
+            void *value = nullptr;
+
             if (compOp_ == NO_OP)
                 goto recordMatches;
 
-            void *value;
             rc = getValueFromRecord(record, recordDescriptor_, conditionAttribute_.name, value);
-            if (rc != SUCCESS)
+            if (rc != SUCCESS && rc != RBFM_SI_NULL_VALUE)
             {
                 free(record);
                 free(pageData);
                 return rc;
             }
-            recordMatchesSearchCriteria = evalCompOp(value, value_, compOp_, conditionAttribute_.type);
-            free(value);
+
+            if (rc == RBFM_SI_NULL_VALUE)
+            {
+                recordMatchesSearchCriteria = false;
+            }
+            else 
+            {
+                recordMatchesSearchCriteria = evalCompOp(value, value_, compOp_, conditionAttribute_.type);
+            }
+
+            if (value != nullptr)
+                free(value);
 
             if (recordMatchesSearchCriteria)
             {

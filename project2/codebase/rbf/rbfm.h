@@ -90,6 +90,7 @@ The scan iterator is NOT required to be implemented for the part 1 of the projec
 # define RBFM_SI_UNLOADED (-2)
 # define RBFM_SI_CLOSED (-3)
 # define RBFM_SI_NO_VALUE_IN_RECORD (-4)
+# define RBFM_SI_NULL_VALUE (-5)
 
 // RBFM_ScanIterator is an iterator to go through records
 // The way to use it is like the following:
