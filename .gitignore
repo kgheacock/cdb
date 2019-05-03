@@ -34,3 +34,6 @@
 # VScode files
 .vscode/*
 *ipch
+
+# Miscellaneous
+*.DS_Store
