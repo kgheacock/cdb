@@ -52,6 +52,7 @@ class IndexManager {
 
     private:
         static IndexManager *_index_manager;
+        static PagedFileManager *_pf_manager;
 };
 
 
@@ -89,7 +90,9 @@ class IXFileHandle {
 
 	// Put the current counter values of associated PF FileHandles into variables
 	RC collectCounterValues(unsigned &readPageCount, unsigned &writePageCount, unsigned &appendPageCount);
-
+    
+    // Pfm fileHandle
+    FileHandle fh;
 };
 
 #endif

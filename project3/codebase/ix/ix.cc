@@ -2,6 +2,8 @@
 #include "ix.h"
 
 IndexManager* IndexManager::_index_manager = 0;
+PagedFileManager *IndexManager::_pf_manager = NULL;
+
 
 IndexManager* IndexManager::instance()
 {
@@ -21,22 +23,23 @@ IndexManager::~IndexManager()
 
 RC IndexManager::createFile(const string &fileName)
 {
+    // See pseudo code in project3 document
     return -1;
 }
 
 RC IndexManager::destroyFile(const string &fileName)
 {
-    return -1;
+    return _pf_manager->destroyFile(fileName);
 }
 
 RC IndexManager::openFile(const string &fileName, IXFileHandle &ixfileHandle)
 {
-    return -1;
+    return _pf_manager->openFile(fileName.c_str(), ixfileHandle.fh);
 }
 
 RC IndexManager::closeFile(IXFileHandle &ixfileHandle)
 {
-    return -1;
+    return _pf_manager->closeFile(ixfileHandle.fh);
 }
 
 RC IndexManager::insertEntry(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, const RID &rid)
@@ -81,7 +84,6 @@ RC IX_ScanIterator::close()
 {
     return -1;
 }
-
 
 IXFileHandle::IXFileHandle()
 {
