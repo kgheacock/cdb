@@ -8,6 +8,23 @@
 
 # define IX_EOF (-1)  // end of the index scan
 
+// Headers for leaf nodes and internal nodes
+typedef struct
+{
+    uint32_t entries;   // entry number
+    uint32_t freeSpace; // free space offset        
+} HeaderInternal;
+
+typedef struct
+{
+    uint32_t entries;   // entry number
+    uint32_t freeSpace; // free space offset
+    uint32_t prev;      // left sibling
+    uint32_t next;      // right sibling
+           
+} HeaderLeaf;
+
+
 class IX_ScanIterator;
 class IXFileHandle;
 
@@ -91,7 +108,7 @@ class IXFileHandle {
 	// Put the current counter values of associated PF FileHandles into variables
 	RC collectCounterValues(unsigned &readPageCount, unsigned &writePageCount, unsigned &appendPageCount);
     
-    // Pfm fileHandle
+    // PF FileHandle
     FileHandle fh;
 };
 
