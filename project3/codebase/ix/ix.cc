@@ -2,7 +2,7 @@
 #include "ix.h"
 
 IndexManager* IndexManager::_index_manager = 0;
-PagedFileManager *IndexManager::_pf_manager = NULL;
+PagedFileManager *IndexManager::_pf_manager = 0;
 
 
 IndexManager* IndexManager::instance()
@@ -15,6 +15,8 @@ IndexManager* IndexManager::instance()
 
 IndexManager::IndexManager()
 {
+    // Initialize the internal PagedFileManager instance
+    _pf_manager = PagedFileManager::instance();
 }
 
 IndexManager::~IndexManager()
