@@ -3,16 +3,21 @@
 
 #include <vector>
 #include <string>
+#include <stdio.h>
+#include <string.h>
 
 #include "../rbf/rbfm.h"
 
-#define IX_EOF (-1) // end of the index scan
-
+#define IX_EOF (-1)                   // end of the index scan
+#define LEAF_PAGE_HEADER_SIZE (13)    // bool isLeaf + int numEntries + int nextPage + int freeSpaceOffset
+#define INTERIOR_PAGE_HEADER_SIZE (9) // bool isLeaf + int numEntries + int nextPage
 class IX_ScanIterator;
 class IXFileHandle;
-
+class IXFile_ScanIterator;
 class IndexManager
 {
+public:
+    friend IXFile_ScanIterator;
 
 public:
     static IndexManager *instance();
@@ -54,39 +59,46 @@ protected:
 private:
     static IndexManager *_index_manager;
     string fileName;
+
     //Pre: page is a pointer to page data of any type
     //Post: the truth value of whether the page parameter is a leaf
-    bool isLeafPage(const void *page);
+    static bool isLeafPage(const void *page);
 
     //Pre: val contains a valid leaf entry to be inserted and attr corresponding to that entry
     //Post: return the total size of the entry including size of RID
-    int findLeafEntrySize(const void *val, const Attribute attr);
+    static int findLeafEntrySize(const void *val, const Attribute attr);
 
     //Pre: page is a pointer to a page data of any type
     //Post: the offset of the page’s free space is returned
-    int freeSpaceOffset(void *page);
+    static int freeSpaceOffset(void *page);
 
     //Pre: val contains a valid entry that will be inserted to a non-leaf page and attr corresponding to that entry
     //Post: return the total size of the entry which will be equal to the key size
-    int findTrafficCopSize(const void *val, const Attribute attr);
+    static int findInteriorNodeSize(const void *val, const Attribute &attr);
 
     //Pre: val contains a valid entry to be inserted either to a Leaf or Non-Leaf page and attr corresponding to that entry.
     //     &Page is a pointer to a FileHandle of a page
     //Post: returns whether or not the given val will fit on the given page.
-    bool willEntryFit(const void *pageData, const void *val, const Attribute attr, bool isLeafValue);
+    static bool willEntryFit(const void *pageData, const void *val, const Attribute attr, bool isLeafValue);
 
-    //Pre: val contains a valid entry to be inserted and attr corresponding to that entry. &page is a pointer to a FileHandle of a
-    //     Non-Leaf page
-    //Post: returns the page number corresponding to either the next level down
+    //Pre: val contains a valid entry to be inserted and attr coresponding to that entry. pageData is a
+    //      page that contains traffic cops
+    //Post: returns the page number of the next page to visit
     int findTrafficCop(const void *val, const Attribute attr, const void *pageData);
 
-    void insertNode(void *page, const void *key, const Attribute &attr, bool isLeafNode);
+    //Pre: *page contains the page where *key will be written. attr corresponds to key and isLeafNode tells
+    //      whether page is a leaf page
+    //Post: *page will be searched and key (which is in the correct format) will be placed in the correct position
+    void insertEntryInPage(void *page, const void *key, const RID &rid, const Attribute &attr, bool isLeafNode);
 
     void splitPage(void *inPage, void *newChildEntry);
+    static int freeSpaceOffset(const void *pageData, bool isLeafPage);
 
     void insertToTree(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, const RID &rid, int nodePointer, void *newChild);
 
     bool isRoot(int pageNumber);
+
+    RC scan(void *page, const Attribute &attr, const void *key, const RID &rid, CompOp comparison, IXFile_ScanIterator &ixf_iter);
 };
 
 class IX_ScanIterator
@@ -103,6 +115,37 @@ public:
 
     // Terminate index scan
     RC close();
+
+private:
+    IXFileHandle *ufh;
+};
+
+//Scan underlying index pages, entry by entry
+class IXFile_ScanIterator //done. No build
+{
+public:
+    friend IndexManager;
+    // Constructor
+    IXFile_ScanIterator();
+
+    // Destructor
+    ~IXFile_ScanIterator();
+
+    // Get next matching entry
+    RC getNextEntry(void *key);
+
+    // Terminate index scan
+    RC close();
+
+private:
+    RC scanInit(bool isLeafNode, void *page, CompOp comparison, void *value, Attribute attr);
+    bool isLeafNode;
+    void *page;
+    CompOp comparison;
+    void *value;
+    int valueSize;
+    Attribute attr;
+    int offset;
 };
 
 class IXFileHandle
@@ -112,7 +155,7 @@ public:
     unsigned ixReadPageCounter;
     unsigned ixWritePageCounter;
     unsigned ixAppendPageCounter;
-    FileHandle fh;
+    FileHandle *ufh;
 
     // Constructor
     IXFileHandle();
