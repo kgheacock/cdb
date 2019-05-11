@@ -78,14 +78,15 @@ RelationManager::RelationManager()
     Attribute tableId_t = {.name = "table-id", .type = TypeInt, .length = sizeof(uint32_t)};
     Attribute tableName_t = {.name = "table-name", .type = TypeVarChar, .length = 50};
     Attribute fileName_t = {.name = "file-name", .type = TypeVarChar, .length = 50};
-    tableCatalogAttributes = { tableId_t, tableName_t, fileName_t };
+    tableCatalogAttributes = {tableId_t, tableName_t, fileName_t};
 
     Attribute tableId_c = {.name = "table-id", .type = TypeInt, .length = sizeof(uint32_t)};
     Attribute columnName_c = {.name = "column-name", .type = TypeVarChar, .length = 50};
     Attribute columnType_c = {.name = "column-type", .type = TypeInt, .length = sizeof(uint32_t)};
     Attribute columnLength_c = {.name = "column-length", .type = TypeInt, .length = sizeof(uint32_t)};
     Attribute columnPos_c = {.name = "column-position", .type = TypeInt, .length = sizeof(uint32_t)};
-    columnCatalogAttributes = { tableId_c, columnName_c, columnType_c, columnLength_c, columnPos_c };
+    Attribute isDropped_c = {.name = "is-dropped", .type = TypeInt, .length = sizeof(uint32_t)};
+    columnCatalogAttributes = {tableId_c, columnName_c, columnType_c, columnLength_c, columnPos_c, isDropped_c};
 
     tableTable = new Table(0, tableCatalogName, tableCatalogName + fileSuffix);
     columnTable = new Table(1, columnCatalogName, columnCatalogName + fileSuffix);
@@ -95,6 +96,62 @@ RelationManager::RelationManager()
 
 RelationManager::~RelationManager()
 {
+}
+int getNullIndicatorSize(int fieldCount)
+{
+    return int(ceil((double)fieldCount / CHAR_BIT));
+}
+bool fieldIsNull(char *nullIndicator, int i)
+{
+    int indicatorIndex = i / CHAR_BIT;
+    int indicatorMask = 1 << (CHAR_BIT - 1 - (i % CHAR_BIT));
+    return (nullIndicator[indicatorIndex] & indicatorMask) != 0;
+}
+void setFieldToNull(char *nullIndicator, int i)
+{
+    int indicatorIndex = i / CHAR_BIT;
+    int indicatorMask = 1 << (CHAR_BIT - 1 - (i % CHAR_BIT));
+    nullIndicator[indicatorIndex] |= indicatorMask;
+}
+unsigned int getRecordSize(const vector<Attribute> &recordDescriptor, const void *data)
+{
+    // Read in the null indicator
+    int nullIndicatorSize = getNullIndicatorSize(recordDescriptor.size());
+    char nullIndicator[nullIndicatorSize];
+    memset(nullIndicator, 0, nullIndicatorSize);
+    memcpy(nullIndicator, (char *)data, nullIndicatorSize);
+
+    // Offset into *data. Start just after the null indicator
+    unsigned offset = nullIndicatorSize;
+    // Running count of size. Initialize it to the size of the header
+    unsigned size = sizeof(RecordLength) + (recordDescriptor.size()) * sizeof(ColumnOffset) + nullIndicatorSize;
+
+    for (unsigned i = 0; i < (unsigned)recordDescriptor.size(); i++)
+    {
+        // Skip null fields
+        if (fieldIsNull(nullIndicator, i))
+            continue;
+        switch (recordDescriptor[i].type)
+        {
+        case TypeInt:
+            size += INT_SIZE;
+            offset += INT_SIZE;
+            break;
+        case TypeReal:
+            size += REAL_SIZE;
+            offset += REAL_SIZE;
+            break;
+        case TypeVarChar:
+            uint32_t varcharSize;
+            // We have to get the size of the VarChar field by reading the integer that precedes the string value itself
+            memcpy(&varcharSize, (char *)data + offset, VARCHAR_LENGTH_SIZE);
+            size += varcharSize;
+            offset += varcharSize + VARCHAR_LENGTH_SIZE;
+            break;
+        }
+    }
+
+    return size;
 }
 
 void RelationManager::addTableToCatalog(Table *table, const vector<Attribute> &attrs)
@@ -214,6 +271,11 @@ void RelationManager::addColumnToCatalog(const Attribute attr, const int tableId
 
     // Column position
     memcpy((char *)buffer + offset, &columnPosition, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+
+    // isDropped
+    int isDropped = (int)false;
+    memcpy((char *)buffer + offset, &isDropped, sizeof(uint32_t));
 
     RID temp;
     _rbfm->insertRecord(columnCatalogFile, columnCatalogAttributes, buffer, temp);
@@ -248,7 +310,7 @@ Table *RelationManager::getTableFromCatalog(const string &tableName, RID &rid)
     FileHandle tableCatalogFile;
     _rbfm->openFile(tableTable->fileName, tableCatalogFile);
 
-    _rbfm->scan(tableCatalogFile, tableCatalogAttributes, "table-name", CompOp::EQ_OP, (void *) tableName.c_str(), attrList, tableCatalogIterator);
+    _rbfm->scan(tableCatalogFile, tableCatalogAttributes, "table-name", CompOp::EQ_OP, (void *)tableName.c_str(), attrList, tableCatalogIterator);
     void *data = malloc(PAGE_SIZE);
     auto rc = tableCatalogIterator.getNextRecord(rid, data);
     tableCatalogIterator.reset();
@@ -267,12 +329,12 @@ Table *RelationManager::getTableFromCatalog(const string &tableName, RID &rid)
 
     // TableID
     int tableId = 0;
-    memcpy(&tableId, (char *) data + offset, sizeof(uint32_t));
+    memcpy(&tableId, (char *)data + offset, sizeof(uint32_t));
     offset += sizeof(uint32_t);
 
     // TableName size
     int tableNameSize = 0;
-    memcpy(&tableNameSize, (char *) data + offset, sizeof(uint32_t));
+    memcpy(&tableNameSize, (char *)data + offset, sizeof(uint32_t));
     offset += sizeof(uint32_t);
 
     // TableName value
@@ -408,8 +470,7 @@ RC RelationManager::deleteTable(const string &tableName)
         }
     }
 }
-
-RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &attrs)
+RC RelationManager::getAttributes(const string &tableName, vector<tuple<Attribute, bool>> &attrs)
 {
     if (!catalogExists())
         return CATALOG_DNE;
@@ -439,7 +500,7 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
     RBFM_ScanIterator rbfmi;
     int tableId = table->tableId;
     delete table;
-    result = _rbfm->scan(columnCatalogFile, columnCatalogAttributes, "table-id", CompOp::EQ_OP, (void *) &tableId, columnAttributeNames, rbfmi);
+    result = _rbfm->scan(columnCatalogFile, columnCatalogAttributes, "table-id", CompOp::EQ_OP, (void *)&tableId, columnAttributeNames, rbfmi);
     if (result != SUCCESS)
     {
         return result;
@@ -449,7 +510,7 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
     void *data = malloc(PAGE_SIZE);
     while (true)
     {
-        result = rbfmi.getNextRecord(rid, data); 
+        result = rbfmi.getNextRecord(rid, data);
         if (result != SUCCESS && result != RBFM_EOF) // Error.
         {
             _rbfm->closeFile(columnCatalogFile);
@@ -481,25 +542,120 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
 
         // Column name value.
         char attrName[attrNameLength + 1];
-        memcpy(&attrName, (char *) data + offset, attrNameLength);
+        memcpy(&attrName, (char *)data + offset, attrNameLength);
         offset += attrNameLength;
         attrName[attrNameLength] = '\0';
         toAdd.name = attrName;
 
         // Column type.
         int type = 0;
-        memcpy(&type, (char *) data + offset, sizeof(uint32_t));
+        memcpy(&type, (char *)data + offset, sizeof(uint32_t));
         offset += sizeof(uint32_t);
         toAdd.type = (AttrType)type;
 
         // Column length.
         int length = 0;
-        memcpy(&length, (char *) data + offset, sizeof(uint32_t));
+        memcpy(&length, (char *)data + offset, sizeof(uint32_t));
         toAdd.length = length;
-        attrs.push_back(toAdd);
+
+        int isDropped = 0;
+        memcpy(&isDropped, (char *)data + offset, sizeof(uint32_t));
+        attrs.push_back({toAdd, isDropped == true});
     }
 }
+RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &attrs)
+{
+    vector<tuple<Attribute, bool>> tempVector;
+    RC result = getAttributes(tableName, tempVector);
+    for (auto attr : tempVector)
+    {
+        attrs.push_back(std::get<0>(attr));
+    }
+    return result;
+}
 
+RC RelationManager::unPadNulls(void *out, const void *data, const vector<tuple<Attribute, bool>> attrs)
+{
+    int nullCount = 0;
+    vector<Attribute> strippedAttrs;
+    for (auto attr : attrs)
+    {
+        bool isNull = std::get<1>(attr);
+        strippedAttrs.push_back(std::get<0>(attr));
+        nullCount += isNull;
+    }
+    int oldNullIndicatorSize = getNullIndicatorSize(attrs.size());
+    int newNullIndicatorSize = getNullIndicatorSize(attrs.size() - nullCount);
+    unsigned int oldRecordSize = getRecordSize(strippedAttrs, data);
+    char *newNullIndicator = (char *)malloc(newNullIndicatorSize);
+    char *oldNullIndicator = (char *)malloc(oldNullIndicatorSize);
+    memcpy(oldNullIndicator, data, oldNullIndicatorSize);
+    int newNullOffset = 0;
+    int oldNullOffset = 0;
+    for (auto attr : attrs)
+    {
+        bool isDropped = std::get<1>(attr);
+        if (isDropped)
+        {
+            ++oldNullOffset;
+            continue;
+        }
+        if (fieldIsNull(oldNullIndicator, oldNullOffset))
+        {
+            setFieldToNull(newNullIndicator, newNullOffset);
+        }
+        ++newNullOffset;
+        ++oldNullOffset;
+    }
+    memcpy(out, newNullIndicator, newNullIndicatorSize);
+    memcpy((char *)out + newNullIndicatorSize, (char *)data + oldNullIndicatorSize, oldRecordSize - newNullIndicatorSize);
+    free(newNullIndicator);
+    free(oldNullIndicator);
+    return SUCCESS;
+}
+RC RelationManager::padNulls(void *out, const void *data, const vector<tuple<Attribute, bool>> attrs)
+{
+    int nullCount = 0;
+    vector<Attribute> strippedAttrs;
+    for (auto attr : attrs)
+    {
+        bool isNull = std::get<1>(attr);
+        if (!isNull)
+        {
+            strippedAttrs.push_back(std::get<0>(attr));
+        }
+        nullCount += isNull;
+    }
+    int oldNullIndicatorSize = getNullIndicatorSize(attrs.size() - nullCount);
+    int newNullIndicatorSize = getNullIndicatorSize(attrs.size());
+    char *newNullIndicator = (char *)malloc(newNullIndicatorSize);
+    char *oldNullIndicator = (char *)malloc(oldNullIndicatorSize);
+    memcpy(oldNullIndicator, data, oldNullIndicatorSize);
+    int newNullOffset = 0;
+    int oldNullOffset = 0;
+    for (auto attr : attrs)
+    {
+        bool isDropped = std::get<1>(attr);
+        if (isDropped)
+        {
+            setFieldToNull(newNullIndicator, newNullOffset);
+            ++newNullOffset;
+            continue;
+        }
+        if (fieldIsNull(oldNullIndicator, oldNullOffset))
+        {
+            setFieldToNull(newNullIndicator, newNullOffset);
+        }
+        ++newNullOffset;
+        ++oldNullOffset;
+    }
+    unsigned int oldRecordSize = getRecordSize(strippedAttrs, data);
+    memcpy(out, newNullIndicator, newNullIndicatorSize);
+    memcpy((char *)out + newNullIndicatorSize, (char *)data + oldNullIndicatorSize, oldRecordSize - oldNullIndicatorSize);
+    free(oldNullIndicator);
+    free(newNullIndicator);
+    return SUCCESS;
+}
 RC RelationManager::insertTuple(const string &tableName, const void *data, RID &rid)
 {
     if (!catalogExists())
@@ -519,16 +675,23 @@ RC RelationManager::insertTuple(const string &tableName, const void *data, RID &
         return result;
 
     vector<Attribute> attributes;
-    result = getAttributes(tableName, attributes);
+    vector<tuple<Attribute, bool>> attributesAndDropped;
+    void *updatedData = malloc(PAGE_SIZE);
+    result = getAttributes(tableName, attributesAndDropped);
+    for (auto attr : attributesAndDropped)
+    {
+        attributes.push_back(std::get<0>(attr));
+    }
     if (result != SUCCESS)
     {
         _rbfm->closeFile(fileHandle);
         return result;
     }
-
-    result = _rbfm->insertRecord(fileHandle, attributes, data, rid);
+    padNulls(updatedData, data, attributesAndDropped);
+    result = _rbfm->insertRecord(fileHandle, attributes, updatedData, rid);
+    free(updatedData);
     if (result != SUCCESS)
-    { 
+    {
         _rbfm->closeFile(fileHandle);
         return result;
     }
@@ -604,7 +767,6 @@ RC RelationManager::updateTuple(const string &tableName, const void *data, const
         _rbfm->closeFile(fileHandle);
         return result;
     }
-
 
     result = _rbfm->closeFile(fileHandle);
     return result;
@@ -684,7 +846,74 @@ RC RelationManager::readAttribute(const string &tableName, const RID &rid, const
     result = _rbfm->closeFile(tableFile);
     return result;
 }
+RC RelationManager::deleteAttribute(const string &tableName, const string &attributeName)
+{
+    FileHandle columnCatalog;
+    RC result = _rbfm->openFile(columnCatalogName + fileSuffix, columnCatalog);
+    vector<tuple<Attribute, bool>> attributesWithDroppedIndicator;
+    vector<Attribute> attributes;
+    result = getAttributes(tableName, attributesWithDroppedIndicator);
+    for (auto attr : attributesWithDroppedIndicator)
+    {
+        attributes.push_back(std::get<0>(attr));
+    }
+    RID temp;
+    Table *tableToUpdate = getTableFromCatalog(tableName, temp);
+    if (result != SUCCESS)
+    {
+        delete tableToUpdate;
+        return result;
+    }
 
+    RBFM_ScanIterator rbfmi;
+    int tableId = tableToUpdate->tableId;
+    delete tableToUpdate;
+    _rbfm->openFile(columnCatalogName + fileSuffix, columnCatalog);
+    vector<string> retAttr = {"column-name"};
+    FileHandle columnCatalogFile;
+    _rbfm->openFile(columnTable->fileName, columnCatalogFile);
+    result = _rbfm->scan(columnCatalogFile, columnCatalogAttributes, "table-id", CompOp::EQ_OP, (void *)&tableId, retAttr, rbfmi);
+    if (result != SUCCESS)
+    {
+        return result;
+    }
+
+    RID rid;
+    void *data = malloc(PAGE_SIZE);
+    while (true)
+    {
+        result = rbfmi.getNextRecord(rid, data);
+        if (result != SUCCESS && result != RBFM_EOF) // Error.
+        {
+            _rbfm->closeFile(columnCatalogFile);
+            return result;
+        }
+
+        if (result == RBFM_EOF) // Base case: no more matching records.
+        {
+            _rbfm->closeFile(columnCatalogFile);
+            free(data);
+            return SUCCESS;
+        }
+        int colNameLength = 0;
+        int offset = 1;
+        memcpy(&colNameLength, (char *)data + 1, sizeof(uint32_t));
+        offset += sizeof(uint32_t);
+        char *colName = (char *)malloc(colNameLength);
+        string colNameString = string(colName);
+        free(colName);
+        if (colNameString.compare(attributeName) == 0)
+        {
+            int recordSize = getRecordSize(columnCatalogAttributes, data);
+            int dropped = (int)false;
+            memcpy((char *)data + recordSize - sizeof(uint32_t), &dropped, sizeof(uint32_t));
+            updateTuple(columnCatalogName, data, rid);
+        }
+    }
+
+    _rbfm->closeFile(columnCatalog);
+    return result;
+}
 RC RelationManager::addAttribute(const string &tableName, const Attribute &attr)
 {
     RID temp;
@@ -724,8 +953,13 @@ RC RelationManager::scan(const string &tableName,
     RID temp;
     Table *tableToScan = getTableFromCatalog(tableName, temp);
 
+    vector<tuple<Attribute, bool>> scannedTableAttributesWithDropped;
     vector<Attribute> scannedTableAttributes;
-    RC result = getAttributes(tableName, scannedTableAttributes);
+    RC result = getAttributes(tableName, scannedTableAttributesWithDropped);
+    for (auto attr : scannedTableAttributesWithDropped)
+    {
+        scannedTableAttributes.push_back(std::get<0>(attr));
+    }
     if (result != SUCCESS)
         return result;
 
@@ -747,7 +981,10 @@ RC RelationManager::scan(const string &tableName,
 
 RC RM_ScanIterator::getNextTuple(RID &rid, void *data)
 {
-    RC result = underlyingIterator.getNextRecord(rid, data);
+    void *temp = malloc(PAGE_SIZE);
+    RC result = underlyingIterator.getNextRecord(rid, temp);
+    RelationManager::unPadNulls(data, temp, attrsWithDropped);
+    free(temp);
     if (result == RBFM_EOF)
         return RM_EOF;
     return result;
@@ -765,4 +1002,3 @@ RC RM_ScanIterator::reset()
 {
     return underlyingIterator.reset();
 }
-

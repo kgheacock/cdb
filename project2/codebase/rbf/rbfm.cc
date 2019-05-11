@@ -158,11 +158,25 @@ RC RecordBasedFileManager::closeFile(FileHandle &fileHandle)
 {
     return _pf_manager->closeFile(fileHandle);
 }
-
 RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const void *data, RID &rid)
 {
     // Gets the size of the record.
-    unsigned recordSize = getRecordSize(recordDescriptor, data);
+    vector<tuple<Attribute, bool>> temp;
+    for (Attribute attr : recordDescriptor)
+    {
+        temp.push_back({attr, false});
+    }
+    return insertRecord(fileHandle, temp, data, rid);
+}
+RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<tuple<Attribute, bool>> &recordDescriptor, const void *data, RID &rid)
+{
+    // Gets the size of the record.
+    vector<Attribute> strippedRecordDescriptor;
+    for (auto attr : recordDescriptor)
+    {
+        strippedRecordDescriptor.push_back(std::get<0>(attr));
+    }
+    unsigned recordSize = getRecordSize(strippedRecordDescriptor, data);
 
     // Cycles through pages looking for enough free space for the new entry.
     void *pageData = malloc(PAGE_SIZE);
@@ -229,7 +243,7 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
     setSlotDirectoryHeader(pageData, slotHeader);
 
     // Adding the record data.
-    setRecordAtOffset(pageData, newRecordEntry.offset, recordDescriptor, data);
+    setRecordAtOffset(pageData, newRecordEntry.offset, strippedRecordDescriptor, data);
 
     // Writing the page to disk.
     if (spaceFound)
@@ -943,7 +957,6 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data)
                 return rc;
             }
 
-
             bool recordMatchesSearchCriteria = false; // Assume no match until proven otherwise.
             void *value = nullptr;
 
@@ -962,7 +975,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data)
             {
                 recordMatchesSearchCriteria = false;
             }
-            else 
+            else
             {
                 recordMatchesSearchCriteria = evalCompOp(value, value_, compOp_, conditionAttribute_.type);
             }
@@ -972,7 +985,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data)
 
             if (recordMatchesSearchCriteria)
             {
-recordMatches:
+            recordMatches:
                 lastRID_.pageNum = page_i;
                 lastRID_.slotNum = slot_j;
                 lastRIDInitialized_ = true;
@@ -1110,7 +1123,6 @@ RC RBFM_ScanIterator::projectRecord(const void *data_og, const vector<Attribute>
             recordDescriptor_pj.push_back(recordDescriptor_og[i]);
             nullIndicatorField_pj++;
         }
-
 
         bool isNull = rbfm_->fieldIsNull(nullIndicator_og, i);
         if (isNull)

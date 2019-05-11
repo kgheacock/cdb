@@ -8,9 +8,25 @@
 
 #include "../rbf/rbfm.h"
 
-#define IX_EOF (-1)                   // end of the index scan
 #define LEAF_PAGE_HEADER_SIZE (13)    // bool isLeaf + int numEntries + int nextPage + int freeSpaceOffset
 #define INTERIOR_PAGE_HEADER_SIZE (9) // bool isLeaf + int numEntries + int nextPage
+const int IX_EOF(-1);                 // end of the index scan
+// Headers for leaf nodes and internal nodes
+typedef struct
+{
+    uint32_t entries;   // entry number
+    uint32_t freeSpace; // free space offset
+} HeaderInternal;
+
+typedef struct
+{
+    uint32_t entries;   // entry number
+    uint32_t freeSpace; // free space offset
+    uint32_t prev;      // left sibling
+    uint32_t next;      // right sibling
+
+} HeaderLeaf;
+
 class IX_ScanIterator;
 class IXFileHandle;
 class IXFile_ScanIterator;
@@ -58,6 +74,7 @@ protected:
 
 private:
     static IndexManager *_index_manager;
+    static PagedFileManager *_pf_manager;
     string fileName;
 
     //Pre: page is a pointer to page data of any type

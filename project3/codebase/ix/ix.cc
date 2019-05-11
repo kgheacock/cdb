@@ -2,9 +2,8 @@
 #include "ix.h"
 
 IndexManager *IndexManager::_index_manager = 0;
-//------------------------------------------------------------------------------------------
-//-----------------------IndexManager------------------------------------------------
-//------------------------------------------------------------------------------------------
+PagedFileManager *IndexManager::_pf_manager = 0;
+
 IndexManager *IndexManager::instance()
 {
     if (!_index_manager)
@@ -15,7 +14,8 @@ IndexManager *IndexManager::instance()
 
 IndexManager::IndexManager()
 {
-    //TODO: create instance of pfm
+    // Initialize the internal PagedFileManager instance
+    _pf_manager = PagedFileManager::instance();
 }
 
 IndexManager::~IndexManager()
@@ -28,25 +28,23 @@ RC IndexManager::createFile(const string &fileName)
     IndexManager::fileName = fileName;
     //TODO: open underlying file and create root and first leaf node where both are empty
     //close underlying file
+    //see project3 document for pseudo code
     return -1;
 }
 
 RC IndexManager::destroyFile(const string &fileName)
 {
-    //TODO: destroy file
-    return -1;
+    return _pf_manager->destroyFile(fileName);
 }
 
 RC IndexManager::openFile(const string &fileName, IXFileHandle &ixfileHandle)
 {
-    //TODO: call pfm open file and set ixfileHandle properly
-    return -1;
+    return _pf_manager->openFile(fileName.c_str(), *ixfileHandle.ufh);
 }
 
 RC IndexManager::closeFile(IXFileHandle &ixfileHandle)
 {
-    //TODO: close underlying file pointed to by ixfileHandle
-    return -1;
+    return _pf_manager->closeFile(*ixfileHandle.ufh);
 }
 
 RC IndexManager::insertEntry(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, const RID &rid)

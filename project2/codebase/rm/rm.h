@@ -34,6 +34,7 @@ public:
 
 private:
   RBFM_ScanIterator underlyingIterator;
+  vector<tuple<Attribute, bool>> attrsWithDropped;
 };
 
 class Table
@@ -52,6 +53,7 @@ class RelationManager
 {
 public:
   static RelationManager *instance();
+  friend class RM_ScanIterator;
 
   RC createCatalog();
 
@@ -68,7 +70,7 @@ public:
   RC deleteTuple(const string &tableName, const RID &rid);
 
   RC updateTuple(const string &tableName, const void *data, const RID &rid);
-
+  RC deleteAttribute(const string &tableName, const string &attributeName);
   RC readTuple(const string &tableName, const RID &rid, void *data);
 
   // Print a tuple that is passed to this utility method.
@@ -109,8 +111,12 @@ private:
   vector<Attribute> tableCatalogAttributes;
   vector<Attribute> columnCatalogAttributes;
   void addTableToCatalog(Table *table, const vector<Attribute> &attrs);
+  RC getAttributes(const string &tableName, vector<tuple<Attribute, bool>> &attrs);
+  RC padNulls(void *out, const void *data, const vector<tuple<Attribute, bool>> attrs);
+  static RC unPadNulls(void *out, const void *data, const vector<tuple<Attribute, bool>> attrs);
   void addColumnsToCatalog(const vector<Attribute> &attrs, int tableId);
   void addColumnToCatalog(const Attribute attr, const int tableId, const int columnPosition, FileHandle &columnCatalogFile);
+
   bool catalogExists();
   Table *getTableFromCatalog(const string &tableName, RID &rid);
 
@@ -121,6 +127,5 @@ private:
   const string _fIndexName = "current_highest_table_index";
   RC writeTableIndex(int newIndex);
 };
-
 
 #endif
