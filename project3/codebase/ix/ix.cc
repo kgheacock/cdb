@@ -313,8 +313,7 @@ RC IXFile_ScanIterator::getNextEntry(void *key)
     {
         return IX_EOF;
     }
-    key = malloc(valueSize);
-    memcpy(value, (char *)page + offset, valueSize);
+    memcpy(key, (char *)page + offset, valueSize);
     offset += valueSize;
     return SUCCESS;
 }
