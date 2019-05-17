@@ -11,6 +11,7 @@
 #define LEAF_PAGE_HEADER_SIZE (13)    // bool isLeaf + int numEntries + int nextPage + int freeSpaceOffset
 #define INTERIOR_PAGE_HEADER_SIZE (9) // bool isLeaf + int numEntries + int nextPage
 const int IX_EOF(-1);                 // end of the index scan
+
 // Headers for leaf nodes and internal nodes
 typedef struct
 {
@@ -27,6 +28,7 @@ typedef struct
 
 } HeaderLeaf;
 
+
 class IX_ScanIterator;
 class IXFileHandle;
 class IXFile_ScanIterator;
@@ -37,6 +39,7 @@ public:
 
 public:
     static IndexManager *instance();
+    int rootPage;
 
     // Create an index file.
     RC createFile(const string &fileName);

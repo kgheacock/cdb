@@ -26,10 +26,23 @@ IndexManager::~IndexManager()
 RC IndexManager::createFile(const string &fileName)
 {
     IndexManager::fileName = fileName;
-    //TODO: open underlying file and create root and first leaf node where both are empty
-    //close underlying file
-    //see project3 document for pseudo code
-    return -1;
+    
+    _pf_manager->createFile(fileName.c_str());
+    IXFileHandle fileHandle;
+    openFile(fileName, fileHandle);
+    // create root page
+    void *page = calloc(PAGE_SIZE, 1);
+    rootPage = 1;
+    createEmptyPage(fileHandle, page, false, rootPage);
+    _pf_manager->writePage(rootPage, page); 
+    free(page);
+    
+    // create first leaf node
+    page = calloc(PAGE_SIZE, 1);
+    int pageNumber = -1;
+    createEmptyPage(fileHandle, page, true, pageNumber);
+    _pf_manager->writePage(pageNumber, page);
+    free(page);
 }
 
 RC IndexManager::destroyFile(const string &fileName)
