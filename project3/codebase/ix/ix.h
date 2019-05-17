@@ -42,7 +42,6 @@ class IndexManager
 
 public:
     static IndexManager *instance();
-    int rootPage;
 
     // Create an index file.
     RC createFile(const string &fileName);
