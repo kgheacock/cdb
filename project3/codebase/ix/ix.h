@@ -8,16 +8,9 @@
 
 #include "../rbf/rbfm.h"
 
-<<<<<<< HEAD
 const int LEAF_PAGE_HEADER_SIZE(17);    // bool isLeaf + int numEntries + int leftSibling + int rightSibling + int freeSpaceOffset
 const int INTERIOR_PAGE_HEADER_SIZE(9); // bool isLeaf + int numEntries + int freeSpace
 const int IX_EOF(-1);                   // end of the index scan
-=======
-#define LEAF_PAGE_HEADER_SIZE (13)    // bool isLeaf + int numEntries + int nextPage + int freeSpaceOffset
-#define INTERIOR_PAGE_HEADER_SIZE (9) // bool isLeaf + int numEntries + int nextPage
-const int IX_EOF(-1);                 // end of the index scan
-
->>>>>>> 471cecef3e401fb09ccc18933d7ed4c685d13452
 // Headers for leaf nodes and internal nodes
 typedef struct
 {
@@ -34,7 +27,6 @@ typedef struct
 
 } HeaderLeaf;
 
-
 class IX_ScanIterator;
 class IXFileHandle;
 class IndexManager
@@ -42,7 +34,6 @@ class IndexManager
 
 public:
     static IndexManager *instance();
-    int rootPage;
 
     // Create an index file.
     RC createFile(const string &fileName);
@@ -122,10 +113,11 @@ private:
     //Post: a new node will be allocated with the minimum value in the right child as the traffic cop. The left pointer of that traffic cop will point to leftChild
     void updateRoot(IXFileHandle &IXFileHandle, const int leftChild, const int rightChild, void *rightChildValue);
 
+    //NOTE:: if splitting a non-leaf page then delete the middle value and set it to newChildEntry
     void splitPage(IXFileHandle &ixfileHandle, const Attribute &attribute, void *inPage, void *newChildEntry, bool isLeafPage, int &newPageNumber);
     static int freeSpaceOffset(const void *pageData, bool isLeafPage);
 
-    void getNextEntry(void *page, int &currentOffset, void *fieldValue, const Attribute attr, bool isLeafPage);
+    RC getNextEntry(void *page, int &currentOffset, int &entryCount, void *fieldValue, void *slotData, const Attribute attr, bool isLeafPage);
 
     void insertToTree(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, const RID &rid, int nodePointer, void *newChild, bool isLeafPage);
 

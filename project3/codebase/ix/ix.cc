@@ -54,9 +54,10 @@ RC IndexManager::createEmptyPage(IXFileHandle &index_file, void *page, bool isLe
     }
     //find page number to insert
     void *pageData = malloc(PAGE_SIZE);
-    for (int i = 1; i <= index_file->ufh.getNumberOfPages(); ++i)
+    int numberOfPages = index_file.ufh->getNumberOfPages();
+    for (int i = 1; i <= numberOfPages; ++i)
     {
-        index_file.readPage(i, pageData);
+        index_file.ufh->readPage(i, pageData);
         if (findNumberOfEntries(pageData) == 0)
         {
             pageNumber = i;
@@ -71,20 +72,12 @@ RC IndexManager::createEmptyPage(IXFileHandle &index_file, void *page, bool isLe
 int IndexManager::findNumberOfEntries(const void *page)
 {
     int numberOfEntires = 0;
-    memcpy(&numberOfEntires, (char *)page + 4, sizeof(uint32_t));
+    memcpy(&numberOfEntires, (char *)page + 1, sizeof(uint32_t));
     return numberOfEntires;
 }
 RC IndexManager::createFile(const string &fileName)
 {
     IndexManager::fileName = fileName;
-<<<<<<< HEAD
-    RC result = _pf_manager->createFile(fileName);
-    //_pf_manager =
-    //TODO: open underlying file and create root and first leaf node where both are empty
-    //close underlying file
-    //see project3 document for pseudo code
-    return -1;
-=======
     RC rc = _pf_manager->createFile(fileName.c_str());
     if (rc)
         return rc;
@@ -103,7 +96,7 @@ RC IndexManager::createFile(const string &fileName)
         free(page);
         return rc;
     }
-    rc = _pf_manager->writePage(rootPage, page);
+    rc = fileHandle.ufh->readPage(rootPage, page);
     if (rc)
     {
         free(page);
@@ -111,7 +104,6 @@ RC IndexManager::createFile(const string &fileName)
     }
     free(page);
     return SUCCESS;
->>>>>>> 471cecef3e401fb09ccc18933d7ed4c685d13452
 }
 
 RC IndexManager::destroyFile(const string &fileName)
@@ -206,16 +198,19 @@ bool IndexManager::willEntryFit(const void *pageData, const void *val, const Att
 int IndexManager::findInteriorNodeSize(const void *val, const Attribute &attr)
 {
     int key_size = 0;
+    const int pagePointerSize = 4;
     switch (attr.type)
     {
     case TypeInt:
     case TypeReal:
         key_size = 4;
+        key_size += pagePointerSize;
         break;
     case TypeVarChar:
         memcpy(&key_size, val, sizeof(uint32_t));
         if (key_size <= 0)
             throw "Since values are never null, the VarChar length should never be 0. Check format of val";
+        key_size += pagePointerSize;
         break;
     }
     return key_size;
@@ -223,21 +218,36 @@ int IndexManager::findInteriorNodeSize(const void *val, const Attribute &attr)
 void IndexManager::splitPage(IXFileHandle &ixfileHandle, const Attribute &attribute, void *inPage, void *newChildEntry, bool isLeafPage, int &newPageNumber)
 {
 }
-void IndexManager::getNextEntry(void *page, int &currentOffset, void *fieldValue, const Attribute attr, bool isLeafPage)
+RC IndexManager::getNextEntry(void *page, int &currentOffset, int &entryCount, void *fieldValue, void *slotData, const Attribute attr, bool isLeafPage)
 {
     if (currentOffset == 0)
     {
         currentOffset = findFreeSpaceOffset(page);
     }
+    if (entryCount == findNumberOfEntries(page))
+        return IX_EOF;
+    const int RID_SIZE = sizeof(uint32_t) * 2;
     if (isLeafPage)
     {
         switch (attr.type)
         {
         case TypeInt:
         case TypeReal:
-            memcpy(fieldValue, page + currentOffset) break;
-        case TypeVarChar:
+            memcpy(fieldValue, (char *)page + currentOffset, sizeof(uint32_t));
+            currentOffset += sizeof(uint32_t);
+            memcpy(slotData, (char *)page + currentOffset, RID_SIZE);
+            currentOffset += RID_SIZE;
             break;
+        case TypeVarChar:
+        {
+            int varCharSize = 0;
+            memcpy(&varCharSize, (char *)page + currentOffset, sizeof(uint32_t));
+            memcpy(fieldValue, (char *)page + currentOffset, sizeof(uint32_t) + varCharSize);
+            currentOffset += sizeof(uint32_t) + varCharSize;
+            memcpy(fieldValue, (char *)page + currentOffset, RID_SIZE);
+            currentOffset += RID_SIZE;
+        }
+        break;
         }
     }
     else
@@ -246,11 +256,25 @@ void IndexManager::getNextEntry(void *page, int &currentOffset, void *fieldValue
         {
         case TypeInt:
         case TypeReal:
+            memcpy(fieldValue, (char *)page + currentOffset, sizeof(uint32_t));
+            currentOffset += sizeof(uint32_t);
+            memcpy(slotData, (char *)page + currentOffset, sizeof(uint32_t));
+            currentOffset += sizeof(uint32_t);
             break;
         case TypeVarChar:
-            break;
+        {
+            int varCharSize = 0;
+            memcpy(&varCharSize, (char *)page + currentOffset, sizeof(uint32_t));
+            memcpy(fieldValue, (char *)page + currentOffset, sizeof(uint32_t) + varCharSize);
+            currentOffset += sizeof(uint32_t) + varCharSize;
+            memcpy(slotData, (char *)page + currentOffset, sizeof(uint32_t));
+            currentOffset += sizeof(uint32_t);
+        }
+        break;
         }
     }
+    entryCount++;
+    return SUCCESS;
 }
 //IN PROGRESS
 void IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, const RID &rid, int nodePointer, void *newChild)
@@ -376,67 +400,4 @@ IXFileHandle::~IXFileHandle()
 RC IXFileHandle::collectCounterValues(unsigned &readPageCount, unsigned &writePageCount, unsigned &appendPageCount)
 {
     return ufh->collectCounterValues(readPageCount, writePageCount, appendPageCount);
-<<<<<<< HEAD
 }
-=======
-}
-//------------------------------------------------------------------------------------------
-//-----------------------IXFILE_ScanIterator------------------------------------------------
-//------------------------------------------------------------------------------------------
-RC IXFile_ScanIterator::scanInit(bool isLeafNode, void *page, CompOp comparison, void *value, Attribute attr)
-{
-    IXFile_ScanIterator::isLeafNode = isLeafNode;
-    IXFile_ScanIterator::page = page;
-    switch (attr.type)
-    {
-    case TypeInt:
-    case TypeReal:
-        valueSize = sizeof(uint32_t);
-        IXFile_ScanIterator::value = malloc(valueSize);
-        break;
-    case TypeVarChar:
-        memcpy(&valueSize, value, sizeof(uint32_t));
-        valueSize += sizeof(uint32_t);
-        IXFile_ScanIterator::value = malloc(valueSize);
-        memcpy(IXFile_ScanIterator::value, value, valueSize);
-        break;
-    }
-    IXFile_ScanIterator::attr = attr;
-    IXFile_ScanIterator::comparison = comparison;
-    if (isLeafNode)
-    {
-        offset = LEAF_PAGE_HEADER_SIZE;
-    }
-    else
-    {
-        offset = INTERIOR_PAGE_HEADER_SIZE;
-    }
-
-    return SUCCESS;
-}
-RC IXFile_ScanIterator::close()
-{
-    free(page);
-    free(value);
-    return SUCCESS;
-}
-RC IXFile_ScanIterator::getNextEntry(void *key)
-{
-    int valueSize = 0;
-    if (isLeafNode)
-    {
-        valueSize = IndexManager::findLeafEntrySize(value, attr);
-    }
-    else
-    {
-        valueSize = IndexManager::findInteriorNodeSize(value, attr);
-    }
-    if (offset + valueSize > PAGE_SIZE)
-    {
-        return IX_EOF;
-    }
-    memcpy(key, (char *)page + offset, valueSize);
-    offset += valueSize;
-    return SUCCESS;
-}
->>>>>>> 471cecef3e401fb09ccc18933d7ed4c685d13452
