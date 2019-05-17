@@ -8,9 +8,16 @@
 
 #include "../rbf/rbfm.h"
 
+<<<<<<< HEAD
 const int LEAF_PAGE_HEADER_SIZE(17);    // bool isLeaf + int numEntries + int leftSibling + int rightSibling + int freeSpaceOffset
 const int INTERIOR_PAGE_HEADER_SIZE(9); // bool isLeaf + int numEntries + int freeSpace
 const int IX_EOF(-1);                   // end of the index scan
+=======
+#define LEAF_PAGE_HEADER_SIZE (13)    // bool isLeaf + int numEntries + int nextPage + int freeSpaceOffset
+#define INTERIOR_PAGE_HEADER_SIZE (9) // bool isLeaf + int numEntries + int nextPage
+const int IX_EOF(-1);                 // end of the index scan
+
+>>>>>>> 471cecef3e401fb09ccc18933d7ed4c685d13452
 // Headers for leaf nodes and internal nodes
 typedef struct
 {
@@ -27,6 +34,7 @@ typedef struct
 
 } HeaderLeaf;
 
+
 class IX_ScanIterator;
 class IXFileHandle;
 class IndexManager
@@ -34,6 +42,7 @@ class IndexManager
 
 public:
     static IndexManager *instance();
+    int rootPage;
 
     // Create an index file.
     RC createFile(const string &fileName);

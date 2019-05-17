@@ -77,12 +77,41 @@ int IndexManager::findNumberOfEntries(const void *page)
 RC IndexManager::createFile(const string &fileName)
 {
     IndexManager::fileName = fileName;
+<<<<<<< HEAD
     RC result = _pf_manager->createFile(fileName);
     //_pf_manager =
     //TODO: open underlying file and create root and first leaf node where both are empty
     //close underlying file
     //see project3 document for pseudo code
     return -1;
+=======
+    RC rc = _pf_manager->createFile(fileName.c_str());
+    if (rc)
+        return rc;
+
+    IXFileHandle fileHandle;
+    rc = openFile(fileName, fileHandle);
+    if (rc)
+        return rc;
+
+    // create the root page - a leaf page at first
+    void *page = calloc(PAGE_SIZE, 1);
+    rootPage = 1;
+    rc = createEmptyPage(fileHandle, page, true, rootPage);
+    if (rc)
+    {
+        free(page);
+        return rc;
+    }
+    rc = _pf_manager->writePage(rootPage, page);
+    if (rc)
+    {
+        free(page);
+        return rc;
+    }
+    free(page);
+    return SUCCESS;
+>>>>>>> 471cecef3e401fb09ccc18933d7ed4c685d13452
 }
 
 RC IndexManager::destroyFile(const string &fileName)
@@ -347,4 +376,67 @@ IXFileHandle::~IXFileHandle()
 RC IXFileHandle::collectCounterValues(unsigned &readPageCount, unsigned &writePageCount, unsigned &appendPageCount)
 {
     return ufh->collectCounterValues(readPageCount, writePageCount, appendPageCount);
+<<<<<<< HEAD
 }
+=======
+}
+//------------------------------------------------------------------------------------------
+//-----------------------IXFILE_ScanIterator------------------------------------------------
+//------------------------------------------------------------------------------------------
+RC IXFile_ScanIterator::scanInit(bool isLeafNode, void *page, CompOp comparison, void *value, Attribute attr)
+{
+    IXFile_ScanIterator::isLeafNode = isLeafNode;
+    IXFile_ScanIterator::page = page;
+    switch (attr.type)
+    {
+    case TypeInt:
+    case TypeReal:
+        valueSize = sizeof(uint32_t);
+        IXFile_ScanIterator::value = malloc(valueSize);
+        break;
+    case TypeVarChar:
+        memcpy(&valueSize, value, sizeof(uint32_t));
+        valueSize += sizeof(uint32_t);
+        IXFile_ScanIterator::value = malloc(valueSize);
+        memcpy(IXFile_ScanIterator::value, value, valueSize);
+        break;
+    }
+    IXFile_ScanIterator::attr = attr;
+    IXFile_ScanIterator::comparison = comparison;
+    if (isLeafNode)
+    {
+        offset = LEAF_PAGE_HEADER_SIZE;
+    }
+    else
+    {
+        offset = INTERIOR_PAGE_HEADER_SIZE;
+    }
+
+    return SUCCESS;
+}
+RC IXFile_ScanIterator::close()
+{
+    free(page);
+    free(value);
+    return SUCCESS;
+}
+RC IXFile_ScanIterator::getNextEntry(void *key)
+{
+    int valueSize = 0;
+    if (isLeafNode)
+    {
+        valueSize = IndexManager::findLeafEntrySize(value, attr);
+    }
+    else
+    {
+        valueSize = IndexManager::findInteriorNodeSize(value, attr);
+    }
+    if (offset + valueSize > PAGE_SIZE)
+    {
+        return IX_EOF;
+    }
+    memcpy(key, (char *)page + offset, valueSize);
+    offset += valueSize;
+    return SUCCESS;
+}
+>>>>>>> 471cecef3e401fb09ccc18933d7ed4c685d13452
