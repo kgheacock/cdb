@@ -8,9 +8,9 @@
 
 #include "../rbf/rbfm.h"
 
-#define LEAF_PAGE_HEADER_SIZE (13)    // bool isLeaf + int numEntries + int nextPage + int freeSpaceOffset
-#define INTERIOR_PAGE_HEADER_SIZE (9) // bool isLeaf + int numEntries + int nextPage
-const int IX_EOF(-1);                 // end of the index scan
+const int LEAF_PAGE_HEADER_SIZE(17);    // bool isLeaf + int numEntries + int leftSibling + int rightSibling + int freeSpaceOffset
+const int INTERIOR_PAGE_HEADER_SIZE(9); // bool isLeaf + int numEntries + int freeSpace
+const int IX_EOF(-1);                   // end of the index scan
 // Headers for leaf nodes and internal nodes
 typedef struct
 {
@@ -29,11 +29,8 @@ typedef struct
 
 class IX_ScanIterator;
 class IXFileHandle;
-class IXFile_ScanIterator;
 class IndexManager
 {
-public:
-    friend IXFile_ScanIterator;
 
 public:
     static IndexManager *instance();
@@ -76,10 +73,15 @@ private:
     static IndexManager *_index_manager;
     static PagedFileManager *_pf_manager;
     string fileName;
+    int rootPage;
+
+    RC createEmptyPage(IXFileHandle &index_file, void *page, bool isLeafPage, int &pageNumber, int leftSibling = 0, int rightSibling = 0);
 
     //Pre: page is a pointer to page data of any type
     //Post: the truth value of whether the page parameter is a leaf
     static bool isLeafPage(const void *page);
+
+    static int findNumberOfEntries(const void *page);
 
     //Pre: val contains a valid leaf entry to be inserted and attr corresponding to that entry
     //Post: return the total size of the entry including size of RID
@@ -87,7 +89,7 @@ private:
 
     //Pre: page is a pointer to a page data of any type
     //Post: the offset of the page’s free space is returned
-    static int freeSpaceOffset(void *page);
+    static int findFreeSpaceOffset(const void *page);
 
     //Pre: val contains a valid entry that will be inserted to a non-leaf page and attr corresponding to that entry
     //Post: return the total size of the entry which will be equal to the key size
@@ -108,14 +110,17 @@ private:
     //Post: *page will be searched and key (which is in the correct format) will be placed in the correct position
     void insertEntryInPage(void *page, const void *key, const RID &rid, const Attribute &attr, bool isLeafNode);
 
-    void splitPage(void *inPage, void *newChildEntry);
+    //Post: a new node will be allocated with the minimum value in the right child as the traffic cop. The left pointer of that traffic cop will point to leftChild
+    void updateRoot(IXFileHandle &IXFileHandle, const int leftChild, const int rightChild, void *rightChildValue);
+
+    void splitPage(IXFileHandle &ixfileHandle, const Attribute &attribute, void *inPage, void *newChildEntry, bool isLeafPage, int &newPageNumber);
     static int freeSpaceOffset(const void *pageData, bool isLeafPage);
 
-    void insertToTree(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, const RID &rid, int nodePointer, void *newChild);
+    void getNextEntry(void *page, int &currentOffset, void *fieldValue, const Attribute attr, bool isLeafPage);
+
+    void insertToTree(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, const RID &rid, int nodePointer, void *newChild, bool isLeafPage);
 
     bool isRoot(int pageNumber);
-
-    RC scan(void *page, const Attribute &attr, const void *key, const RID &rid, CompOp comparison, IXFile_ScanIterator &ixf_iter);
 };
 
 class IX_ScanIterator
@@ -135,34 +140,6 @@ public:
 
 private:
     IXFileHandle *ufh;
-};
-
-//Scan underlying index pages, entry by entry
-class IXFile_ScanIterator //done. No build
-{
-public:
-    friend IndexManager;
-    // Constructor
-    IXFile_ScanIterator();
-
-    // Destructor
-    ~IXFile_ScanIterator();
-
-    // Get next matching entry
-    RC getNextEntry(void *key);
-
-    // Terminate index scan
-    RC close();
-
-private:
-    RC scanInit(bool isLeafNode, void *page, CompOp comparison, void *value, Attribute attr);
-    bool isLeafNode;
-    void *page;
-    CompOp comparison;
-    void *value;
-    int valueSize;
-    Attribute attr;
-    int offset;
 };
 
 class IXFileHandle
