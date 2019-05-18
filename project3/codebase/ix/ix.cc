@@ -53,11 +53,18 @@ RC IndexManager::createEmptyPage(IXFileHandle &index_file, void *page, bool isLe
         offset += sizeof(uint32_t);
         memcpy((char *)page + offset, &INTERIOR_PAGE_HEADER_SIZE, sizeof(uint32_t));
     }
+
     //find page number to insert
     void *pageData = malloc(PAGE_SIZE);
-    for (unsigned int i = 1; i <= index_file.ufh->getNumberOfPages(); ++i)
+    for (unsigned int i = 0; i < index_file.ufh->getNumberOfPages(); ++i)
     {
-        index_file.ufh->readPage(i, pageData);
+        auto rc = index_file.ufh->readPage(i, pageData);
+        if (rc != SUCCESS)
+        {
+            free(pageData);
+            return rc;
+        }
+
         if (findNumberOfEntries(pageData) == 0)
         {
             pageNumber = i;
@@ -67,6 +74,7 @@ RC IndexManager::createEmptyPage(IXFileHandle &index_file, void *page, bool isLe
             pageNumber = -1;
         }
     }
+    free(pageData);
     return SUCCESS;
 }
 
@@ -81,30 +89,40 @@ RC IndexManager::createFile(const string &fileName)
 {
     IndexManager::fileName = fileName;
     RC rc = _pf_manager->createFile(fileName.c_str());
-    if (rc)
+    if (rc != SUCCESS)
         return rc;
 
     IXFileHandle fileHandle;
     rc = openFile(fileName, fileHandle);
-    if (rc)
+    if (rc != SUCCESS)
         return rc;
 
     // create the root page - a leaf page at first
     void *page = calloc(PAGE_SIZE, 1);
-    rootPage = 1;
-    rc = createEmptyPage(fileHandle, page, true, rootPage);
-    if (rc)
+    bool isLeaf = true;
+
+    if (fileHandle.ufh->getNumberOfPages() != 0)
+    {
+        free(page);
+        return -1;
+    }
+
+    rc = createEmptyPage(fileHandle, page, isLeaf, rootPage);
+    if (rc != SUCCESS)
     {
         free(page);
         return rc;
     }
-    rc = fileHandle.ufh->writePage(rootPage, page);
-    if (rc)
-    {
-        free(page);
-        return rc;
-    }
+
+    rc = fileHandle.ufh->appendPage(page);
     free(page);
+
+    if (rc != SUCCESS)
+        return rc;
+
+    if (fileHandle.ufh->getNumberOfPages() != 1)
+        return -1;
+
     return SUCCESS;
 }
 
