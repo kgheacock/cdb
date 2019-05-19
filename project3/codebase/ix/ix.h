@@ -95,7 +95,7 @@ private:
 
     RC createEmptyPage(IXFileHandle &index_file, void *page, bool isLeafPage, PageNum &pageNumber, int leftSibling = -1, int rightSibling = -1);
 
-    static int findNumberOfEntries(const void *page);
+    static uint32_t findNumberOfEntries(const void *page);
 
     //Pre: val contains a valid leaf entry to be inserted and attr corresponding to that entry
     //Post: return the total size of the entry including size of RID

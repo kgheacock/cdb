@@ -66,9 +66,9 @@ RC IndexManager::createEmptyPage(IXFileHandle &index_file, void *page, bool isLe
     return SUCCESS;
 }
 
-int IndexManager::findNumberOfEntries(const void *page)
+uint32_t IndexManager::findNumberOfEntries(const void *page)
 {
-    int numberOfEntries = 0;
+    uint32_t numberOfEntries = 0;
     memcpy(&numberOfEntries, (char *)page + POSITION_NUM_ENTRIES, SIZEOF_NUM_ENTRIES);
     return numberOfEntries;
 }
@@ -148,28 +148,41 @@ void IndexManager::insertEntryInPage(void *page, const void *key, const RID &rid
     //TODO: search the given page using IXFile_Iterator and find the correct position to insert either a Leaf entry
     //      or TrafficCop entry into *page. Check to make sure it will fit first. If the position is in middle, make sure
     //      to not write over existing data. If iterator reaches EOF, the correct position is at the end
+    uint32_t numEntries = findNumberOfEntries(page);
     if (isLeafNode)
     {
         //int offset = 0;
-        if (findNumberOfEntries(page) == 0)
+        if (numEntries == 0)
         {
             size_t insertPosition = SIZEOF_HEADER_LEAF;
             const size_t newFreeSpaceOffset = insertPosition + findLeafEntrySize(key, attr);
 
+            // Write key.
             const size_t keySize = findKeySize(key, attr);
             memcpy((char *)page + insertPosition, key, keySize);
             insertPosition += keySize;
 
+            // Write RID pageNum.
             memcpy((char *)page + insertPosition, &(rid.pageNum), sizeof(uint32_t));
             insertPosition += sizeof(uint32_t);
             
+            // Write RID slotNum.
             memcpy((char *)page + insertPosition, &(rid.slotNum), sizeof(uint32_t));
             insertPosition += sizeof(uint32_t);
 
+            // Update free space offset.
             memcpy((char *)page + POSITION_FREE_SPACE_OFFSET, &newFreeSpaceOffset, SIZEOF_FREE_SPACE_OFFSET);
+
         }
-        //int freeSpaceOffset = findFreeSpaceOffset(page);
+        else
+        {
+            //int freeSpaceOffset = findFreeSpaceOffset(page);
+
+        }
     }
+
+    numEntries++;
+    memcpy((char *)page + POSITION_NUM_ENTRIES, &numEntries, SIZEOF_NUM_ENTRIES);
 }
 
 int IndexManager::findLeafEntrySize(const void *val, const Attribute attr)
@@ -220,7 +233,7 @@ int IndexManager::findKeySize(const void *val, const Attribute attr)
 
 int IndexManager::findFreeSpaceOffset(const void *pageData)
 {
-    size_t freeSpaceOffset;
+    size_t freeSpaceOffset = 0;
     memcpy(&freeSpaceOffset, (char *)pageData + POSITION_FREE_SPACE_OFFSET, SIZEOF_FREE_SPACE_OFFSET);
 
     size_t headerSize = isLeafPage(pageData) ? SIZEOF_HEADER_LEAF : SIZEOF_HEADER_INTERIOR;
