@@ -24,65 +24,53 @@ IndexManager::~IndexManager()
     //TODO: check for allocated member variables that need to be discarded and delete/free them
 }
 
-RC IndexManager::createEmptyPage(IXFileHandle &index_file, void *page, bool isLeafPage, int &pageNumber, int leftSibling, int rightSibling)
+RC IndexManager::createEmptyPage(IXFileHandle &index_file, void *page, bool isLeaf, PageNum &pageNumber, int leftSibling, int rightSibling)
 {
-    if (isLeafPage)
-    {
-        int number_of_entries = 0;
+    // isLeaf | number of entries | free space offset | ...
+    memcpy((char *) page + POSITION_IS_LEAF, &isLeaf, SIZEOF_IS_LEAF);
 
-        //|isLeaf|NumEntries|freeSpaceOffset|leftChild|rightChild|
-        int offset = 0;
-        memcpy(page, &isLeafPage, sizeof(bool));
-        offset += sizeof(bool);
-        memcpy((char *)page + offset, &number_of_entries, sizeof(uint32_t));
-        offset += sizeof(uint32_t);
-        memcpy((char *)page + offset, &LEAF_PAGE_HEADER_SIZE, sizeof(uint32_t));
-        offset += sizeof(uint32_t);
-        memcpy((char *)page + offset, &leftSibling, sizeof(uint32_t));
-        offset += sizeof(uint32_t);
-        memcpy((char *)page + offset, &rightSibling, sizeof(uint32_t));
-    }
-    else
+    uint32_t numberOfEntries = 0;
+    memcpy((char *)page + POSITION_NUM_ENTRIES, &numberOfEntries, SIZEOF_NUM_ENTRIES);
+
+    uint32_t freeSpaceOffset = isLeaf ? SIZEOF_HEADER_LEAF : SIZEOF_HEADER_INTERIOR;
+    memcpy((char *)page + POSITION_FREE_SPACE_OFFSET, &freeSpaceOffset, SIZEOF_FREE_SPACE_OFFSET);
+
+    if (isLeaf)
     {
-        //|isLeaf|NumEntries|freeSpaceOffset|
-        int number_of_entries = 0;
-        int offset = 0;
-        memcpy(page, &isLeafPage, sizeof(bool));
-        offset += sizeof(bool);
-        memcpy((char *)page + offset, &number_of_entries, sizeof(uint32_t));
-        offset += sizeof(uint32_t);
-        memcpy((char *)page + offset, &INTERIOR_PAGE_HEADER_SIZE, sizeof(uint32_t));
+        memcpy((char *)page + POSITION_SIBLING_PAGENUM_LEFT, &leftSibling, SIZEOF_SIBLING_PAGENUM);
+        memcpy((char *)page + POSITION_SIBLING_PAGENUM_RIGHT, &rightSibling, SIZEOF_SIBLING_PAGENUM);
     }
 
     //find page number to insert
     void *pageData = malloc(PAGE_SIZE);
-    for (unsigned int i = 0; i < index_file.ufh->getNumberOfPages(); ++i)
+    for (pageNumber = 0; pageNumber < index_file.ufh->getNumberOfPages(); ++pageNumber)
     {
-        auto rc = index_file.ufh->readPage(i, pageData);
+        auto rc = index_file.ufh->readPage(pageNumber, pageData);
         if (rc != SUCCESS)
         {
             free(pageData);
             return rc;
         }
 
-        if (findNumberOfEntries(pageData) == 0)
+        bool isPageEmpty = findNumberOfEntries(pageData) == 0;
+        if (isPageEmpty)
         {
-            pageNumber = i;
-        }
-        else
-        {
-            pageNumber = -1;
+            free(pageData);
+            return SUCCESS;
         }
     }
+
+    // No existing empty page was found.
+    // This is still OK.  We just need to append a page instead of writing directly to some page.
     free(pageData);
     return SUCCESS;
 }
 
 int IndexManager::findNumberOfEntries(const void *page)
 {
-    int numberOfEntires = 0;
-    memcpy(&numberOfEntires, (char *)page + 4, sizeof(uint32_t));
-    return numberOfEntires;
+    int numberOfEntries = 0;
+    memcpy(&numberOfEntries, (char *)page + POSITION_NUM_ENTRIES, SIZEOF_NUM_ENTRIES);
+    return numberOfEntries;
 }
 
 RC IndexManager::createFile(const string &fileName)
@@ -92,38 +80,31 @@ RC IndexManager::createFile(const string &fileName)
     if (rc != SUCCESS)
         return rc;
 
+    rc = updateRootPageNumber(fileName, 0);
+    if (rc != SUCCESS)
+        return rc;
+
     IXFileHandle fileHandle;
     rc = openFile(fileName, fileHandle);
     if (rc != SUCCESS)
         return rc;
 
-    // create the root page - a leaf page at first
+    // Create the root page - a leaf page at first.
     void *page = calloc(PAGE_SIZE, 1);
     bool isLeaf = true;
 
-    if (fileHandle.ufh->getNumberOfPages() != 0)
-    {
-        free(page);
-        return -1;
-    }
-
-    rc = createEmptyPage(fileHandle, page, isLeaf, rootPage);
-    if (rc != SUCCESS)
+    PageNum availablePage;
+    rc = createEmptyPage(fileHandle, page, isLeaf, availablePage);
+    if (rc != SUCCESS || availablePage != rootPage)
     {
         free(page);
         return rc;
     }
 
-    rc = fileHandle.ufh->appendPage(page);
+    rc = fileHandle.ufh->writePage(rootPage, page);
     free(page);
 
-    if (rc != SUCCESS)
-        return rc;
-
-    if (fileHandle.ufh->getNumberOfPages() != 1)
-        return -1;
-
-    return SUCCESS;
+    return rc;
 }
 
 RC IndexManager::destroyFile(const string &fileName)
@@ -133,31 +114,35 @@ RC IndexManager::destroyFile(const string &fileName)
 
 RC IndexManager::openFile(const string &fileName, IXFileHandle &ixfileHandle)
 {
+    auto rc = getRootPageNumber(fileName);
+    if (rc != SUCCESS)
+        return rc;
     return _pf_manager->openFile(fileName.c_str(), *ixfileHandle.ufh);
 }
 
 RC IndexManager::closeFile(IXFileHandle &ixfileHandle)
 {
+    rootPage = -1;
     return _pf_manager->closeFile(*ixfileHandle.ufh);
 }
 
 RC IndexManager::insertEntry(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, const RID &rid)
 {
-    //TODO: call insertToTree. Assumes underlying file is open (?)
-    return -1;
+    void *newChild = nullptr;
+    return insertToTree(ixfileHandle, attribute, key, rid, rootPage, newChild);
 }
+
 int IndexManager::findTrafficCop(const void *val, const Attribute attr, const void *pageData)
 {
     //TODO: ???
     return -1; //delete
 }
-bool IndexManager::isRoot(int pageNumber)
-{
-    //TODO: return wether a given page pageNumber is the root page. make sure that the global variable
-    //      is being set properly by other methods if root is updated
 
+bool IndexManager::isRoot(PageNum pageNumber)
+{
     return pageNumber == rootPage;
 }
+
 void IndexManager::insertEntryInPage(void *page, const void *key, const RID &rid, const Attribute &attr, bool isLeafNode)
 {
     //TODO: search the given page using IXFile_Iterator and find the correct position to insert either a Leaf entry
@@ -168,43 +153,117 @@ void IndexManager::insertEntryInPage(void *page, const void *key, const RID &rid
         //int offset = 0;
         if (findNumberOfEntries(page) == 0)
         {
-            //offset = LEAF_PAGE_HEADER_SIZE;
+            size_t insertPosition = SIZEOF_HEADER_LEAF;
+            const size_t newFreeSpaceOffset = insertPosition + findLeafEntrySize(key, attr);
+
+            const size_t keySize = findKeySize(key, attr);
+            memcpy((char *)page + insertPosition, key, keySize);
+            insertPosition += keySize;
+
+            memcpy((char *)page + insertPosition, &(rid.pageNum), sizeof(uint32_t));
+            insertPosition += sizeof(uint32_t);
+            
+            memcpy((char *)page + insertPosition, &(rid.slotNum), sizeof(uint32_t));
+            insertPosition += sizeof(uint32_t);
+
+            memcpy((char *)page + POSITION_FREE_SPACE_OFFSET, &newFreeSpaceOffset, SIZEOF_FREE_SPACE_OFFSET);
         }
         //int freeSpaceOffset = findFreeSpaceOffset(page);
     }
 }
+
 int IndexManager::findLeafEntrySize(const void *val, const Attribute attr)
 {
-    int slot_size = sizeof(uint32_t) * 2;
-    int key_size = 0;
+    int keySize = findKeySize(val, attr);
+    if (keySize < 0)
+        return -1;
+
+    int ridSize = sizeof(uint32_t) * 2; // pageNum + slotNum
+    return keySize + ridSize;
+}
+
+int IndexManager::findInteriorEntrySize(const void *val, const Attribute attr)
+{
+    int keySize = findKeySize(val, attr);
+    if (keySize < 0)
+        return -1;
+
+    int rightPageNumSize = sizeof(uint32_t); // Key must also have corresponding right pointer to child.
+    return keySize + rightPageNumSize;
+}
+
+int IndexManager::findKeySize(const void *val, const Attribute attr)
+{
+    int keySize = -1;
+
     switch (attr.type)
     {
     case TypeInt:
     case TypeReal:
-        key_size = 4;
+        keySize = 4;
         break;
+
     case TypeVarChar:
-        memcpy(&key_size, val, sizeof(uint32_t));
-        if (key_size <= 0)
+        memcpy(&keySize, val, sizeof(uint32_t)); // Get length of string.
+        if (keySize <= 0)
             throw "Since values are never null, the VarChar length should never be 0. Check format of val";
+        keySize += 4;  // Key also contains the length of the string.
+        break;
+
+    default:
+        keySize = -1;
         break;
     }
 
-    return key_size + slot_size;
-}
-int IndexManager::findFreeSpaceOffset(const void *pageData)
-{
-    int free_space_offset_position = sizeof(bool) + sizeof(uint32_t);
-    int free_space_offset = -1;
-    memcpy(&free_space_offset, (char *)pageData + free_space_offset_position, sizeof(uint32_t));
-    if (free_space_offset < std::max(LEAF_PAGE_HEADER_SIZE, INTERIOR_PAGE_HEADER_SIZE))
-        throw "Page is corrupted. free_space_offset should never be less than the header size";
-    return free_space_offset;
+    return keySize;
 }
 
-int IndexManager::freeSpaceOffset(const void *pageData)
+int IndexManager::findFreeSpaceOffset(const void *pageData)
 {
-    return -1;
+    size_t freeSpaceOffset;
+    memcpy(&freeSpaceOffset, (char *)pageData + POSITION_FREE_SPACE_OFFSET, SIZEOF_FREE_SPACE_OFFSET);
+
+    size_t headerSize = isLeafPage(pageData) ? SIZEOF_HEADER_LEAF : SIZEOF_HEADER_INTERIOR;
+    if (freeSpaceOffset < headerSize)
+        throw "Page is corrupted. free_space_offset should never be less than the header size";
+
+    return freeSpaceOffset;
+}
+
+RC IndexManager::getRootPageNumber(const string indexFileName)
+{
+    string rootFileName = indexFileName + ".root";
+    FILE *rootFile = fopen(rootFileName.c_str(), "r");
+    if (rootFile == nullptr)
+        return -1;
+
+    size_t expectedCount = 1;
+    size_t actualCount = fread(&rootPage, sizeof(PageNum), expectedCount, rootFile);
+    fclose(rootFile);
+
+    if (expectedCount != actualCount)
+        return -1;
+
+    return SUCCESS;
+}
+
+RC IndexManager::updateRootPageNumber(const string indexFileName, const PageNum newRoot)
+{
+    string rootFileName = indexFileName + ".root";
+    FILE *rootFile = fopen(rootFileName.c_str(), "wb");
+    if (rootFile == nullptr)
+        return -1;
+
+    size_t expectedCount = 1;
+    size_t actualCount = fwrite(&newRoot, sizeof(PageNum), expectedCount, rootFile);
+    fclose(rootFile);
+    
+    rootPage = newRoot;
+
+    if (expectedCount != actualCount)
+        return -1;
+
+    return SUCCESS;
 }
 
 RC IndexManager::updateRoot()
@@ -214,35 +273,19 @@ RC IndexManager::updateRoot()
 
 bool IndexManager::willEntryFit(const void *pageData, const void *val, const Attribute attr, bool isLeafValue)
 {
-    int free_space_offset = IndexManager::freeSpaceOffset(pageData);
-    int entry_size = 0;
+    int freeSpaceOffset = IndexManager::findFreeSpaceOffset(pageData);
+    int entrySize = 0;
     if (isLeafValue)
     {
-        entry_size = findLeafEntrySize(val, attr);
+        entrySize = findLeafEntrySize(val, attr);
     }
     else
     {
-        entry_size = findInteriorNodeSize(val, attr);
+        entrySize = findInteriorEntrySize(val, attr);
     }
-    return entry_size + free_space_offset >= PAGE_SIZE;
+    return entrySize + freeSpaceOffset < PAGE_SIZE;
 }
-int IndexManager::findInteriorNodeSize(const void *val, const Attribute &attr)
-{
-    int key_size = 0;
-    switch (attr.type)
-    {
-    case TypeInt:
-    case TypeReal:
-        key_size = 4;
-        break;
-    case TypeVarChar:
-        memcpy(&key_size, val, sizeof(uint32_t));
-        if (key_size <= 0)
-            throw "Since values are never null, the VarChar length should never be 0. Check format of val";
-        break;
-    }
-    return key_size;
-}
+
 
 void IndexManager::splitPage(IXFileHandle &ixfileHandle, const Attribute &attribute, void *inPage, void *newChildEntry, int &newPageNumber)
 {
@@ -279,10 +322,19 @@ void IndexManager::getNextEntry(void *page, int &currentOffset, void *fieldValue
     }
 }
 //IN PROGRESS
-void IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, const RID &rid, int nodePointer, void *newChild)
+RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, const RID &rid, int nodePointer, void *newChild)
 {
     void *pageData = malloc(PAGE_SIZE);
-    ixfileHandle.ufh->readPage(nodePointer, pageData);
+    if (pageData == nullptr)
+        return -1;
+
+    auto rc = ixfileHandle.ufh->readPage(nodePointer, pageData);
+    if (rc != SUCCESS)
+    {
+        free(pageData);
+        return rc;
+    }
+
     if (!isLeafPage(pageData))
     {
         int pagePointer = findTrafficCop(key, attribute, pageData); //if page is empty return -1
@@ -291,50 +343,43 @@ void IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &att
         if (newChild == nullptr)
         {
             free(pageData);
-            return;
+            return SUCCESS;
         }
 
-        else
+        if (willEntryFit(pageData, key, attribute, false))
         {
-            if (willEntryFit(pageData, key, attribute, false))
-            {
-                insertEntryInPage(pageData, key, rid, attribute, false);
-                free(pageData);
-                return;
-            }
-            else
-            {
-                newChild = malloc(PAGE_SIZE);
-                int newPageNumber = -1;
-                splitPage(ixfileHandle, attribute, pageData, newChild, newPageNumber);
-                if (isRoot(nodePointer))
-                {
-                    updateRoot(); //Change the global pointer, set the root to now point to the current pages
-                    insertEntryInPage(pageData, newChild, rid, attribute, false);
-                    //TODO:: UPDATE root pointer global variable
-                }
-                free(pageData);
-                return;
-            }
+            insertEntryInPage(pageData, key, rid, attribute, false);
+            free(pageData);
+            return SUCCESS;
         }
+
+        newChild = malloc(PAGE_SIZE);
+        int newPageNumber = -1;
+        splitPage(ixfileHandle, attribute, pageData, newChild, newPageNumber);
+        if (isRoot(nodePointer))
+        {
+            updateRoot(); // Change the global pointer, set the root to now point to the current pages.
+            insertEntryInPage(pageData, newChild, rid, attribute, false);
+            //TODO:: UPDATE root pointer global variable
+        }
+        free(pageData);
+        return SUCCESS;
     }
-    else //Is a leaf page
+    else // Leaf page.
     {
         if (willEntryFit(pageData, key, attribute, true))
         {
-            insertEntryInPage(pageData, newChild, rid, attribute, true);
+            insertEntryInPage(pageData, key, rid, attribute, true);
             free(pageData);
-            return;
+            return SUCCESS;
         }
-        else
-        {
-            newChild = malloc(PAGE_SIZE);
-            //splitPage(pageData, newChild);
-            int newPageNumber = -1;
-            splitPage(ixfileHandle, attribute, pageData, newChild, newPageNumber);
-            free(pageData);
-            return;
-        }
+
+        newChild = malloc(PAGE_SIZE);
+        //splitPage(pageData, newChild);
+        int newPageNumber = -1;
+        splitPage(ixfileHandle, attribute, pageData, newChild, newPageNumber);
+        free(pageData);
+        return SUCCESS;
     }
 }
 RC IndexManager::deleteEntry(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, const RID &rid)
@@ -359,12 +404,11 @@ void IndexManager::printBtree(IXFileHandle &ixfileHandle, const Attribute &attri
 
 bool IndexManager::isLeafPage(const void *page)
 {
-    int val = -1;
-    memcpy(&val, page, sizeof(bool));
-    if (val == -1)
-        throw "isLeafPage is indeterminate. check page for corruption";
-    return val;
+    bool isLeaf;
+    memcpy(&isLeaf, page, sizeof(bool));
+    return isLeaf;
 }
+
 //------------------------------------------------------------------------------------------
 //-----------------------IX_ScanIterator------------------------------------------------
 //------------------------------------------------------------------------------------------

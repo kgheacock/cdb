@@ -1,7 +1,7 @@
 
 include ../makefile.inc
 
-all: libix.a ixtest_01 ixtest_02 ixtest_03 ixtest_04 ixtest_05 ixtest_06 ixtest_07 ixtest_08 ixtest_09 ixtest_10 ixtest_11 ixtest_12 ixtest_13 ixtest_14 ixtest_15 ixtest_extra_02
+all: libix.a ixtest_01 ixtest_02 ixtest_03 ixtest_04 ixtest_05 ixtest_06 ixtest_07 ixtest_08 ixtest_09 ixtest_10 ixtest_11 ixtest_12 ixtest_13 ixtest_14 ixtest_15 ixtest_16 ixtest_extra_02
 
 # lib file dependencies
 libix.a: libix.a(ix.o)  # and possibly other .o files
@@ -25,6 +25,7 @@ ixtest_12.o: ix_test_util.h
 ixtest_13.o: ix_test_util.h
 ixtest_14.o: ix_test_util.h
 ixtest_15.o: ix_test_util.h
+ixtest_16.o: ix_test_util.h
 ixtest_extra_02.o: ix_test_util.h
 
 # binary dependencies
@@ -43,6 +44,7 @@ ixtest_12: ixtest_12.o libix.a $(CODEROOT)/rbf/librbf.a
 ixtest_13: ixtest_13.o libix.a $(CODEROOT)/rbf/librbf.a 
 ixtest_14: ixtest_14.o libix.a $(CODEROOT)/rbf/librbf.a 
 ixtest_15: ixtest_15.o libix.a $(CODEROOT)/rbf/librbf.a 
+ixtest_16: ixtest_16.o libix.a $(CODEROOT)/rbf/librbf.a 
 ixtest_extra_02: ixtest_extra_02.o libix.a $(CODEROOT)/rbf/librbf.a 
 
 # dependencies to compile used libraries
@@ -52,5 +54,5 @@ $(CODEROOT)/rbf/librbf.a:
 
 .PHONY: clean
 clean:
-	-rm *.o *.a ixtest_01 ixtest_02 ixtest_03 ixtest_04 ixtest_05 ixtest_06 ixtest_07 ixtest_08 ixtest_09 ixtest_10 ixtest_11 ixtest_12 ixtest_13 ixtest_14 ixtest_15 ixtest_extra_02 
+	-rm *.o *.a ixtest_01 ixtest_02 ixtest_03 ixtest_04 ixtest_05 ixtest_06 ixtest_07 ixtest_08 ixtest_09 ixtest_10 ixtest_11 ixtest_12 ixtest_13 ixtest_14 ixtest_15 ixtest_16 ixtest_extra_02 
 	$(MAKE) -C $(CODEROOT)/rbf clean

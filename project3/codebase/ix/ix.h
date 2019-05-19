@@ -8,24 +8,36 @@
 
 #include "../rbf/rbfm.h"
 
-const int LEAF_PAGE_HEADER_SIZE(17);    // bool isLeaf + int numEntries + int leftSibling + int rightSibling + int freeSpaceOffset
-const int INTERIOR_PAGE_HEADER_SIZE(9); // bool isLeaf + int numEntries + int freeSpace
-const int IX_EOF(-1);                   // end of the index scan
+const size_t SIZEOF_IS_LEAF = sizeof(bool);
+const size_t SIZEOF_NUM_ENTRIES = sizeof(uint32_t);
+const size_t SIZEOF_FREE_SPACE_OFFSET = sizeof(uint32_t);
+const size_t SIZEOF_SIBLING_PAGENUM = sizeof(PageNum);
+
+const size_t SIZEOF_HEADER_LEAF = SIZEOF_IS_LEAF + SIZEOF_NUM_ENTRIES + SIZEOF_FREE_SPACE_OFFSET + (SIZEOF_SIBLING_PAGENUM * 2);
+const size_t SIZEOF_HEADER_INTERIOR = SIZEOF_IS_LEAF + SIZEOF_NUM_ENTRIES + SIZEOF_FREE_SPACE_OFFSET;
+
+// Byte position in page where each field must be accessed.
+const size_t POSITION_IS_LEAF = 0;
+const size_t POSITION_NUM_ENTRIES = POSITION_IS_LEAF + SIZEOF_IS_LEAF;
+const size_t POSITION_FREE_SPACE_OFFSET = POSITION_NUM_ENTRIES + SIZEOF_NUM_ENTRIES;
+const size_t POSITION_SIBLING_PAGENUM_LEFT = POSITION_FREE_SPACE_OFFSET + SIZEOF_FREE_SPACE_OFFSET;
+const size_t POSITION_SIBLING_PAGENUM_RIGHT = POSITION_SIBLING_PAGENUM_LEFT + SIZEOF_SIBLING_PAGENUM;
+
+const int IX_EOF(-1); // end of the index scan
 
 // Headers for leaf nodes and internal nodes
 typedef struct
 {
-    uint32_t entries;   // entry number
-    uint32_t freeSpace; // free space offset
-} HeaderInternal;
+    uint32_t numEntries;
+    uint32_t freeSpaceOffset;
+} HeaderInterior;
 
 typedef struct
 {
-    uint32_t entries;   // entry number
-    uint32_t freeSpace; // free space offset
-    uint32_t prev;      // left sibling
-    uint32_t next;      // right sibling
-
+    uint32_t numEntries;
+    uint32_t freeSpaceOffset;
+    PageNum leftSibling;
+    PageNum rightSibling;
 } HeaderLeaf;
 
 
@@ -67,6 +79,9 @@ public:
     // Print the B+ tree in pre-order (in a JSON record format)
     void printBtree(IXFileHandle &ixfileHandle, const Attribute &attribute) const;
 
+    //Pre: page is a pointer to page data of any type
+    //Post: the truth value of whether the page parameter is a leaf
+    static bool isLeafPage(const void *page);
 
 protected:
     IndexManager();
@@ -76,13 +91,9 @@ private:
     static IndexManager *_index_manager;
     static PagedFileManager *_pf_manager;
     string fileName;
-    int rootPage;
+    PageNum rootPage;
 
-    RC createEmptyPage(IXFileHandle &index_file, void *page, bool isLeafPage, int &pageNumber, int leftSibling = 0, int rightSibling = 0);
-
-    //Pre: page is a pointer to page data of any type
-    //Post: the truth value of whether the page parameter is a leaf
-    static bool isLeafPage(const void *page);
+    RC createEmptyPage(IXFileHandle &index_file, void *page, bool isLeafPage, PageNum &pageNumber, int leftSibling = -1, int rightSibling = -1);
 
     static int findNumberOfEntries(const void *page);
 
@@ -90,15 +101,15 @@ private:
     //Post: return the total size of the entry including size of RID
     static int findLeafEntrySize(const void *val, const Attribute attr);
 
+    //Pre: val contains a valid entry that will be inserted to a non-leaf page and attr corresponding to that entry
+    //Post: return the total size of the entry which will be equal to the key size
+    static int findInteriorEntrySize(const void *val, const Attribute attr);
+
+    static int findKeySize(const void *val, const Attribute attr);
+
     //Pre: page is a pointer to a page data of any type
     //Post: the offset of the page’s free space is returned
     static int findFreeSpaceOffset(const void *page);
-
-    //Pre: val contains a valid entry that will be inserted to a non-leaf page and attr corresponding to that entry
-    //Post: return the total size of the entry which will be equal to the key size
-    static int findInteriorNodeSize(const void *val, const Attribute &attr);
-
-    static int freeSpaceOffset(const void *pageData);
 
     //Pre: val contains a valid entry to be inserted either to a Leaf or Non-Leaf page and attr corresponding to that entry.
     //     &Page is a pointer to a FileHandle of a page
@@ -123,11 +134,13 @@ private:
 
     void getNextEntry(void *page, int &currentOffset, void *fieldValue, const Attribute attr, bool isLeafPage);
 
-    void insertToTree(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, const RID &rid, int nodePointer, void *newChild);
+    RC insertToTree(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, const RID &rid, int nodePointer, void *newChild);
 
-    bool isRoot(int pageNumber);
+    bool isRoot(PageNum pageNumber);
 
     RC updateRoot();
+    RC getRootPageNumber(const string indexFileName);
+    RC updateRootPageNumber(const string indexFileName, const PageNum newRoot);
 };
 
 class IX_ScanIterator
