@@ -108,7 +108,7 @@ private:
     //Pre: *page contains the page where *key will be written. attr corresponds to key and isLeafNode tells
     //      whether page is a leaf page
     //Post: *page will be searched and key (which is in the correct format) will be placed in the correct position
-    void insertEntryInPage(void *page, const void *key, const RID &rid, const Attribute &attr, bool isLeafNode);
+    void insertEntryInPage(void *page, const void *key, const RID &rid, const Attribute &attr, bool isLeafNode, int rightChild = -1);
 
     //Post: a new node will be allocated with the minimum value in the right child as the traffic cop. The left pointer of that traffic cop will point to leftChild
     void updateRoot(IXFileHandle &IXFileHandle, const int leftChild, const int rightChild, void *rightChildValue);

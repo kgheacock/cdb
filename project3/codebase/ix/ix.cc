@@ -138,20 +138,66 @@ bool IndexManager::isRoot(int pageNumber)
 
     return pageNumber == rootPage;
 }
-void IndexManager::insertEntryInPage(void *page, const void *key, const RID &rid, const Attribute &attr, bool isLeafNode)
+void IndexManager::insertEntryInPage(void *page, const void *key, const RID &rid, const Attribute &attr, bool isLeafNode, int rightChild = -1)
 {
     //TODO: search the given page using IXFile_Iterator and find the correct position to insert either a Leaf entry
     //      or TrafficCop entry into *page. Check to make sure it will fit first. If the position is in middle, make sure
     //      to not write over existing data. If iterator reaches EOF, the correct position is at the end
+    int entrySize = isLeafNode ? findLeafEntrySize(key, attr) : findInteriorNodeSize(key, attr);
+    const int RID_SIZE = sizeof(uint32_t) * 2;
+    void *entryToInsert = malloc(entrySize);
     if (isLeafNode)
     {
         int offset = 0;
-        if (findNumberOfEntries(page) == 0)
-        {
-            offset = LEAF_PAGE_HEADER_SIZE;
-        }
-        int freeSpaceOffset = findFreeSpaceOffset(page);
+        memcpy(entryToInsert, key, entrySize - RID_SIZE);
+        offset = entrySize - RID_SIZE;
+        memcpy((char *)entryToInsert + offset, &rid.pageNum, sizeof(uint32_t));
+        offset += sizeof(uint32_t);
+        memcpy((char *)entryToInsert + offset, &rid.slotNum, sizeof(uint32_t));
     }
+    else
+    {
+        int offset = 0;
+        memcpy(entryToInsert, key, entrySize - sizeof(uint32_t));
+        offset = entrySize - sizeof(uint32_t);
+        memcpy((char *)entryToInsert, &rightChild, sizeof(uint32_t));
+    }
+    int offset = 0;
+    int numberOfEntries = 0;
+    void *entry = malloc(PAGE_SIZE);
+    void *slotData = malloc(PAGE_SIZE);
+    int previousOffset = isLeafNode ? LEAF_PAGE_HEADER_SIZE : INTERIOR_PAGE_HEADER_SIZE;
+    //previous offset will contain the value of the offset that contains the greatest entry that is < than key
+    while (getNextEntry(page, offset, numberOfEntries, entry, slotData, attr, isLeafNode) != IX_EOF)
+    {
+        int result = 0;
+        int varCharLength = 0;
+        switch (attr.type)
+        {
+        case TypeInt:
+        case TypeReal:
+            result = memcmp(entry, key, sizeof(uint32_t));
+            break;
+        case TypeVarChar:
+            memcpy(&varCharLength, key, sizeof(uint32_t));
+            result = memcmp(entry, key, sizeof(uint32_t) + varCharLength);
+            break;
+        }
+        if (result >= 0)
+            break;
+        previousOffset = offset;
+    }
+    int freeSpaceOffset = findFreeSpaceOffset(page);
+    //Move everything from: previousOffset to freeSpaceOffset to: previousOffset + entrySize
+    void *partToMove = malloc(freeSpaceOffset - previousOffset);
+    memcpy(partToMove, (char *)page + previousOffset, freeSpaceOffset - previousOffset);
+    //Copy new entry to page
+    memcpy((char *)page + previousOffset, entryToInsert, entrySize);
+    //Recopy the previously saved part
+    memcpy((char *)page + previousOffset + entrySize, partToMove, freeSpaceOffset - previousOffset);
+    //Set freespaceOffset
+    freeSpaceOffset += entrySize;
+    memcpy((char *)page + 5, &freeSpaceOffset, sizeof(uint32_t));
 }
 int IndexManager::findLeafEntrySize(const void *val, const Attribute attr)
 {
