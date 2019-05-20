@@ -48,7 +48,7 @@ RC IndexManager::createEmptyPage(IXFileHandle &index_file, void *page, bool isLe
     void *pageData = malloc(PAGE_SIZE);
     for (pageNumber = 0; pageNumber < index_file.ufh->getNumberOfPages(); ++pageNumber)
     {
-        auto rc = index_file.ufh->readPage(pageNumber, pageData);
+        auto rc = index_file.readPage(pageNumber, pageData);
         if (rc != SUCCESS)
         {
             free(pageData);
@@ -104,7 +104,7 @@ RC IndexManager::createFile(const string &fileName)
         return rc;
     }
 
-    rc = fileHandle.ufh->writePage(rootPage, page);
+    rc = fileHandle.writePage(rootPage, page);
     free(page);
 
     return rc;
@@ -479,7 +479,7 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
     if (pageData == nullptr)
         return -1;
 
-    auto rc = ixfileHandle.ufh->readPage(nodePointer, pageData);
+    auto rc = ixfileHandle.readPage(nodePointer, pageData);
     if (rc != SUCCESS)
     {
         free(pageData);
@@ -500,7 +500,7 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
         if (willEntryFit(pageData, key, attribute, false))
         {
             insertEntryInPage(pageData, key, rid, attribute, false);
-            ixfileHandle.ufh->writePage(nodePointer, pageData);
+            ixfileHandle.writePage(nodePointer, pageData);
             free(pageData);
             return SUCCESS;
         }
@@ -512,7 +512,7 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
         {
             updateRoot(); // Change the global pointer, set the root to now point to the current pages.
             insertEntryInPage(pageData, newChild, rid, attribute, false);
-            ixfileHandle.ufh->writePage(nodePointer, pageData);
+            ixfileHandle.writePage(nodePointer, pageData);
             //TODO:: UPDATE root pointer global variable
         }
         free(pageData);
@@ -523,7 +523,7 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
         if (willEntryFit(pageData, key, attribute, true))
         {
             insertEntryInPage(pageData, key, rid, attribute, true);
-            ixfileHandle.ufh->writePage(nodePointer, pageData);
+            ixfileHandle.writePage(nodePointer, pageData);
             free(pageData);
             return SUCCESS;
         }
@@ -624,7 +624,7 @@ void IndexManager::printBtree(IXFileHandle &ixfileHandle, const Attribute &attri
 void IndexManager::printBtree(IXFileHandle &ixfileHandle, const Attribute &attribute, uint32_t depth, PageNum pageNumber) const
 {
     void *pageData = calloc(PAGE_SIZE, 1);
-    ixfileHandle.ufh->readPage(pageNumber, pageData);
+    ixfileHandle.readPage(pageNumber, pageData);
 
     if (isLeafPage(pageData))
     {
@@ -792,6 +792,27 @@ IXFileHandle::IXFileHandle()
 IXFileHandle::~IXFileHandle()
 {
     delete (ufh);
+}
+
+RC IXFileHandle::readPage(PageNum pageNum, void *data)
+{
+ixReadPageCounter++;
+RC rc = ufh->readPage(pageNum, data);
+return rc;
+}
+
+RC IXFileHandle::writePage(PageNum pageNum, const void *data)
+{
+ixWritePageCounter++;
+RC rc = ufh->writePage(pageNum, data);
+return rc;
+}
+
+RC IXFileHandle::appendPage(const void *data)
+{
+ixAppendPageCounter++;
+RC rc = ufh->appendPage(data);
+return rc;
 }
 
 RC IXFileHandle::collectCounterValues(unsigned &readPageCount, unsigned &writePageCount, unsigned &appendPageCount)

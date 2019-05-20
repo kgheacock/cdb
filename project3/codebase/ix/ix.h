@@ -189,7 +189,12 @@ public:
     unsigned ixWritePageCounter;
     unsigned ixAppendPageCounter;
     FileHandle *ufh;
-
+     
+    // Read, write, and append functions to update counters
+    RC readPage(PageNum pageNum, void *data);
+    RC writePage(PageNum pageNum, const void *data);
+    RC appendPage(const void *data);
+    
     // Constructor
     IXFileHandle();
 
