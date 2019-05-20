@@ -12,6 +12,7 @@ const size_t SIZEOF_IS_LEAF = sizeof(bool);
 const size_t SIZEOF_NUM_ENTRIES = sizeof(uint32_t);
 const size_t SIZEOF_FREE_SPACE_OFFSET = sizeof(uint32_t);
 const size_t SIZEOF_SIBLING_PAGENUM = sizeof(PageNum);
+const size_t SIZEOF_CHILD_PAGENUM = sizeof(PageNum);
 
 const size_t SIZEOF_HEADER_LEAF = SIZEOF_IS_LEAF + SIZEOF_NUM_ENTRIES + SIZEOF_FREE_SPACE_OFFSET + (SIZEOF_SIBLING_PAGENUM * 2);
 const size_t SIZEOF_HEADER_INTERIOR = SIZEOF_IS_LEAF + SIZEOF_NUM_ENTRIES + SIZEOF_FREE_SPACE_OFFSET;
@@ -49,10 +50,17 @@ class IndexManager
 public:
     static IndexManager *instance();
 
+    static vector<tuple<void *, int>> getKeysWithSizes_interior(const Attribute attribute, const void *pageData);
+    static vector<int> getChildPointers_interior(const Attribute attribute, const void *pageData);
+
     static vector<tuple<void *, int>> getDataEntriesWithSizes_leaf(const Attribute attribute, const void *pageData);
     static vector<tuple<void *, int>> getKeysWithSizes_leaf(const Attribute attribute, vector<tuple<void *, int>> dataEntriesWithSizes);
     static vector<RID> getRIDs_leaf(const Attribute attribute, vector<tuple<void *, int>> dataEntriesWithSizes);
+
     static tuple<void *, int> getKeyDataWithSize(const Attribute attribute, const void *key);
+
+    static HeaderInterior getHeaderInterior(const void *pageData);
+    static void setHeaderInterior(void *pageData, HeaderInterior header);
 
     static HeaderLeaf getHeaderLeaf(const void *pageData);
     static void setHeaderLeaf(void *pageData, HeaderLeaf header);

@@ -137,13 +137,131 @@ RC IndexManager::insertEntry(IXFileHandle &ixfileHandle, const Attribute &attrib
 
 int IndexManager::findTrafficCop(const void *val, const Attribute attr, const void *pageData)
 {
-    //TODO: ???
-    return -1; //delete
+    tuple<void *, int> targetTrafficCopWithSize = getKeyDataWithSize(attr, val);
+    void *targetTrafficCop = get<0>(targetTrafficCopWithSize);
+
+    vector<tuple<void *, int>> keysWithSizes = getKeysWithSizes_interior(attr, pageData);
+    vector<int> children = getChildPointers_interior(attr, pageData);
+
+    for (auto it = children.begin(); it != children.end(); ++it)
+    {
+        int i = distance(children.begin(), it);
+
+        int child = *it;
+        tuple<void *, int> currentTrafficCopWithSize = getKeyDataWithSize(attr, get<0>(keysWithSizes[i]));
+        void *currentTrafficCop = get<0>(currentTrafficCopWithSize);
+
+        // G++ isn't smart enough to realize it's OK to skip over initialization in switch statement.
+        int targetVal_int;
+        int currentVal_int;
+        float targetVal_float;
+        float currentVal_float;
+        string targetVal_string;
+        string currentVal_string;
+
+        bool target_gteq_current;
+        switch (attr.type)
+        {
+            case TypeInt:
+                targetVal_int = * (int *) targetTrafficCop;
+                currentVal_int = * (int *) currentTrafficCop;
+                target_gteq_current = targetVal_int >= currentVal_int;
+                break;
+            case TypeReal:
+                targetVal_float = * (float *) targetTrafficCop;
+                currentVal_float = * (float *) currentTrafficCop;
+                target_gteq_current = targetVal_float >= currentVal_float;
+                break;
+            case TypeVarChar:
+                targetVal_string = (char *) targetTrafficCop;
+                currentVal_string = (char *) currentTrafficCop;
+                target_gteq_current = targetVal_string.compare(currentVal_string) >= 0;
+                break;
+            default:
+                continue;
+        }
+
+        if (!target_gteq_current)
+        {
+            return child;
+        }
+    }
+    return children.back();
+}
+
+vector<tuple<void *, int>> IndexManager::getKeysWithSizes_interior(const Attribute attribute, const void *pageData)
+{
+    vector<tuple<void *, int>> keysWithSizes;
+
+    uint32_t numEntries = findNumberOfEntries(pageData);
+
+    size_t firstEntryPosition = SIZEOF_HEADER_INTERIOR + SIZEOF_CHILD_PAGENUM; // Skip over header and first child pointer.
+    size_t offset = firstEntryPosition;
+
+    for (uint32_t i = 0; i < numEntries; i++)
+    {
+        void *entry = (char *)pageData + offset;
+        int entrySize = findInteriorEntrySize(entry, attribute);
+        int keySize = entrySize - SIZEOF_CHILD_PAGENUM; // Each "entry" is key + pagenum for child with keys >= (i.e. the right child).
+        void *savedKey = calloc(keySize + 1, sizeof(uint8_t)); // Safety (+1) is for reading null-term if attribute is VarChar.
+        memcpy(savedKey, entry, keySize);
+        keysWithSizes.push_back(make_tuple(savedKey, keySize));
+        offset += entrySize;
+    }
+
+    return keysWithSizes;
+}
+
+vector<int> IndexManager::getChildPointers_interior(const Attribute attribute, const void *pageData)
+{
+    vector<int> children;
+    int child;
+
+    uint32_t numEntries = findNumberOfEntries(pageData);
+
+    // Add leftmost child pointer initially.
+    // We treat entries as <key, right child pointer>, so this keeps that convention for iterating later.
+    if (numEntries > 0)
+    {
+        memcpy(&child, (char *)pageData + SIZEOF_HEADER_INTERIOR, SIZEOF_CHILD_PAGENUM);
+        children.push_back(child);
+    }
+
+    size_t firstEntryPosition = SIZEOF_HEADER_INTERIOR + SIZEOF_CHILD_PAGENUM; // Skip over header and first child pointer.
+    size_t offset = firstEntryPosition;
+
+    for (uint32_t i = 0; i < numEntries; i++)
+    {
+        void *entry = (char *)pageData + offset;
+        int entrySize = findInteriorEntrySize(entry, attribute);
+        int keySize = entrySize - SIZEOF_CHILD_PAGENUM; // Each "entry" is key + pagenum for child with keys >= (i.e. the right child).
+        offset += keySize; // Skip over key so we're now on right child pointer.
+
+        memcpy(&child, (char *)pageData + offset, SIZEOF_CHILD_PAGENUM);
+        children.push_back(child);
+        offset += entrySize;
+    }
+
+    return children;
 }
 
 bool IndexManager::isRoot(PageNum pageNumber)
 {
     return pageNumber == rootPage;
+}
+
+HeaderInterior IndexManager::getHeaderInterior(const void *pageData)
+{
+    HeaderInterior header;
+    memcpy(&(header.numEntries), (char *)pageData + POSITION_NUM_ENTRIES, SIZEOF_NUM_ENTRIES);
+    memcpy(&(header.freeSpaceOffset), (char *)pageData + POSITION_FREE_SPACE_OFFSET, SIZEOF_FREE_SPACE_OFFSET);
+    return header;
+}
+
+void IndexManager::setHeaderInterior(void *pageData, HeaderInterior header)
+{
+    memcpy((char *)pageData + POSITION_NUM_ENTRIES, &(header.numEntries), SIZEOF_NUM_ENTRIES);
+    memcpy((char *)pageData + POSITION_FREE_SPACE_OFFSET, &(header.freeSpaceOffset), SIZEOF_FREE_SPACE_OFFSET);
 }
 
 HeaderLeaf IndexManager::getHeaderLeaf(const void *pageData)
@@ -438,8 +556,7 @@ vector<tuple<void *, int>> IndexManager::getDataEntriesWithSizes_leaf(const Attr
 {
     vector<tuple<void *, int>> entriesWithSizes;
 
-    uint32_t numEntries = 0;
-    memcpy(&numEntries, (char *) pageData + POSITION_NUM_ENTRIES, SIZEOF_NUM_ENTRIES);
+    uint32_t numEntries = findNumberOfEntries(pageData);
 
     size_t firstEntryPosition = SIZEOF_HEADER_LEAF;
     size_t offset = firstEntryPosition;
@@ -448,7 +565,7 @@ vector<tuple<void *, int>> IndexManager::getDataEntriesWithSizes_leaf(const Attr
     {
         void *entry = (char *)pageData + offset;
         int entrySize = findLeafEntrySize(entry, attribute);
-        void *savedEntry = malloc(entrySize);
+        void *savedEntry = calloc(entrySize + 1, sizeof(uint8_t)); // Safety (+1) is for reading null-term if attribute is VarChar.
         memcpy(savedEntry, entry, entrySize);
         entriesWithSizes.push_back(make_tuple(savedEntry, entrySize));
         offset += entrySize;
