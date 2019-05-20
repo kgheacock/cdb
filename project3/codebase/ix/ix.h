@@ -25,6 +25,7 @@ const size_t POSITION_SIBLING_PAGENUM_LEFT = POSITION_FREE_SPACE_OFFSET + SIZEOF
 const size_t POSITION_SIBLING_PAGENUM_RIGHT = POSITION_SIBLING_PAGENUM_LEFT + SIZEOF_SIBLING_PAGENUM;
 
 const int IX_EOF(-1); // end of the index scan
+const int IX_SI_CLOSED(-2);
 
 // Headers for leaf nodes and internal nodes
 typedef struct
@@ -162,25 +163,6 @@ private:
     RC updateRootPageNumber(const string indexFileName, const PageNum newRoot);
 };
 
-class IX_ScanIterator
-{
-public:
-    // Constructor
-    IX_ScanIterator();
-
-    // Destructor
-    ~IX_ScanIterator();
-
-    // Get next matching entry
-    RC getNextEntry(RID &rid, void *key);
-
-    // Terminate index scan
-    RC close();
-
-private:
-    IXFileHandle *ufh;
-};
-
 class IXFileHandle
 {
 public:
@@ -204,5 +186,43 @@ public:
     // Put the current counter values of associated PF FileHandles into variables
     RC collectCounterValues(unsigned &readPageCount, unsigned &writePageCount, unsigned &appendPageCount);
 };
+
+class IX_ScanIterator
+{
+public:
+    bool closed_;
+
+    IXFileHandle ixfileHandle_;
+    Attribute attribute_;
+    void *lowKey_;
+    void *highKey_;
+    bool lowKeyInclusive_;
+    bool highKeyInclusive_;
+
+    void *currentPageData_;
+    uint32_t numEntriesReadInPage_;
+
+    // Constructor
+    IX_ScanIterator();
+
+    // Destructor
+    ~IX_ScanIterator();
+
+    // Get next matching entry
+    RC getNextEntry(RID &rid, void *key);
+
+    RC open(IXFileHandle &ixfileHandle,
+            Attribute attribute,
+            void *lowKey,
+            void *highKey,
+            bool lowKeyInclusive,
+            bool highKeyInclusive,
+            void *pageData);
+
+    // Terminate index scan
+    RC close();
+};
+
+RC compareKeyData(const Attribute attr, const void *keyData1, const void *keyData2, bool &lt, bool &eq, bool &gt);
 
 #endif

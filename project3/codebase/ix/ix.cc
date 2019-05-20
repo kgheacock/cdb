@@ -143,6 +143,10 @@ int IndexManager::findTrafficCop(const void *val, const Attribute attr, const vo
     vector<tuple<void *, int>> keysWithSizes = getKeysWithSizes_interior(attr, pageData);
     vector<int> children = getChildPointers_interior(attr, pageData);
 
+    // Give priority to first child on null value.
+    if (val == nullptr)
+        return children.empty() ? -1 : children.front();
+
     for (auto it = children.begin(); it != children.end(); ++it)
     {
         int i = distance(children.begin(), it);
@@ -151,42 +155,18 @@ int IndexManager::findTrafficCop(const void *val, const Attribute attr, const vo
         tuple<void *, int> currentTrafficCopWithSize = getKeyDataWithSize(attr, get<0>(keysWithSizes[i]));
         void *currentTrafficCop = get<0>(currentTrafficCopWithSize);
 
-        // G++ isn't smart enough to realize it's OK to skip over initialization in switch statement.
-        int targetVal_int;
-        int currentVal_int;
-        float targetVal_float;
-        float currentVal_float;
-        string targetVal_string;
-        string currentVal_string;
+        bool lt;
+        bool eq;
+        bool gt;
+        auto rc = compareKeyData(attr, targetTrafficCop, currentTrafficCop, lt, eq, gt);
+        if (rc != SUCCESS)
+            return rc;
 
-        bool target_gteq_current;
-        switch (attr.type)
-        {
-            case TypeInt:
-                targetVal_int = * (int *) targetTrafficCop;
-                currentVal_int = * (int *) currentTrafficCop;
-                target_gteq_current = targetVal_int >= currentVal_int;
-                break;
-            case TypeReal:
-                targetVal_float = * (float *) targetTrafficCop;
-                currentVal_float = * (float *) currentTrafficCop;
-                target_gteq_current = targetVal_float >= currentVal_float;
-                break;
-            case TypeVarChar:
-                targetVal_string = (char *) targetTrafficCop;
-                currentVal_string = (char *) currentTrafficCop;
-                target_gteq_current = targetVal_string.compare(currentVal_string) >= 0;
-                break;
-            default:
-                continue;
-        }
-
+        bool target_gteq_current = eq || gt; 
         if (!target_gteq_current)
-        {
             return child;
-        }
     }
-    return children.back();
+    return children.empty() ? -1 : children.back();
 }
 
 vector<tuple<void *, int>> IndexManager::getKeysWithSizes_interior(const Attribute attribute, const void *pageData)
@@ -549,7 +529,30 @@ RC IndexManager::scan(IXFileHandle &ixfileHandle,
                       bool highKeyInclusive,
                       IX_ScanIterator &ix_ScanIterator)
 {
-    return -1;
+    void *pageData = malloc(PAGE_SIZE);
+    auto rc = ixfileHandle.readPage(rootPage, pageData);
+    if (rc != SUCCESS)
+    {
+        free(pageData);
+        return rc;
+    }
+
+    // Base case.
+    if (isLeafPage(pageData))
+        return ix_ScanIterator.open(ixfileHandle,
+                                    attribute,
+                                    const_cast<void *>(lowKey),
+                                    const_cast<void *>(highKey),
+                                    lowKeyInclusive,
+                                    highKeyInclusive,
+                                    const_cast<void *>(pageData));
+
+    // Recursively on corresponding child.
+    int childPage = findTrafficCop(lowKey, attribute, pageData);
+    free(pageData);
+    if (childPage == -1)
+        return -1;
+    return scan(ixfileHandle, attribute, lowKey, highKey, lowKeyInclusive, highKeyInclusive, ix_ScanIterator);
 }
 
 vector<tuple<void *, int>> IndexManager::getDataEntriesWithSizes_leaf(const Attribute attribute, const void *pageData)
@@ -728,6 +731,9 @@ void IndexManager::printInterior(IXFileHandle &ixfileHandle, const Attribute &at
 
 tuple<void *, int> IndexManager::getKeyDataWithSize(const Attribute attribute, const void *key)
 {
+    if (key == nullptr)
+        return make_tuple(nullptr, -1);
+
     void *keyData = calloc(attribute.length + 1, sizeof(uint8_t)); // Null-term if attr is varchar.
     int size = 0;
 
@@ -757,6 +763,71 @@ bool IndexManager::isLeafPage(const void *page)
     return isLeaf;
 }
 
+
+// NOTE: if keyData1 == nullptr, it is interpreted as -inf.  Similarly, if keyData2 == nullptr, it is interpreted as +inf.
+RC compareKeyData(const Attribute attr, const void *keyData1, const void *keyData2, bool &lt, bool &eq, bool &gt)
+{
+    bool negativeInf = keyData1 == nullptr;
+    bool positiveInf = keyData2 == nullptr;
+    if (negativeInf && positiveInf)
+    {
+        lt = true; // -inf < +inf
+        eq = false; // -inf != +inf
+        gt = false; // -inf !> +inf
+        return SUCCESS;
+    }
+    else if (negativeInf)
+    {
+        lt = false; // -inf < x
+        eq = false; // -inf != x
+        gt = true; // -inf !> x
+        return SUCCESS;
+    }
+    else if (positiveInf) // x ? +inf
+    {
+        lt = true; // x < +inf
+        eq = false; // x != +inf
+        gt = false; // x !> +inf
+        return SUCCESS;
+    }
+
+    int kd1_int;
+    int kd2_int;
+    float kd1_float;
+    float kd2_float;
+    string kd1_string;
+    string kd2_string;
+    int stringComp;
+
+    switch (attr.type)
+    {
+        case TypeInt:
+            kd1_int = * (int *) keyData1;
+            kd2_int = * (int *) keyData2;
+            lt = kd1_int < kd2_int;
+            eq = kd1_int == kd2_int;
+            gt = kd1_int > kd2_int;
+            return SUCCESS;
+        case TypeReal:
+            kd1_float = * (float *) keyData1;
+            kd2_float = * (float *) keyData2;
+            lt = kd1_float < kd2_float;
+            eq = kd1_float == kd2_float;
+            gt = kd1_float > kd2_float;
+            return SUCCESS;
+        case TypeVarChar:
+            kd1_string = (char *) keyData1;
+            kd2_string = (char *) keyData2;
+            stringComp = kd1_string.compare(kd2_string);
+            lt = stringComp < 0;
+            eq = stringComp == 0;
+            gt = stringComp > 0;
+            return SUCCESS;
+        default:
+            return -1;
+    }
+}
+
 //------------------------------------------------------------------------------------------
 //-----------------------IX_ScanIterator------------------------------------------------
 //------------------------------------------------------------------------------------------
@@ -770,12 +841,102 @@ IX_ScanIterator::~IX_ScanIterator()
 
 RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
 {
-    return -1;
+    if (closed_)
+        return IX_SI_CLOSED;
+    RC rc;
+    HeaderLeaf header = IndexManager::getHeaderLeaf(currentPageData_);
+    bool readAllEntriesInPage = numEntriesReadInPage_ >= header.numEntries;
+    if (readAllEntriesInPage)
+    {
+        if (header.rightSibling < 0 || header.rightSibling >= (int) ixfileHandle_.ufh->getNumberOfPages())
+            return IX_EOF;
+        rc = ixfileHandle_.readPage(header.rightSibling, currentPageData_);
+        if (rc != SUCCESS)
+            return rc;
+        numEntriesReadInPage_ = 0;
+    }
+
+    // More entries on page to read.
+
+    vector<tuple<void *, int>> dataEntriesWithSizes = IndexManager::getDataEntriesWithSizes_leaf(attribute_, currentPageData_);
+    vector<tuple<void *, int>> keysWithSizes = IndexManager::getKeysWithSizes_leaf(attribute_, dataEntriesWithSizes);
+    vector<RID> rids = IndexManager::getRIDs_leaf(attribute_, dataEntriesWithSizes);
+
+    int i = numEntriesReadInPage_; // if we've read entries [0, i), we must now read entry i.
+
+    tuple<void *, int> current = IndexManager::getKeyDataWithSize(attribute_, get<0>(keysWithSizes[i]));
+    tuple<void *, int> low = IndexManager::getKeyDataWithSize(attribute_, lowKey_);
+    tuple<void *, int> high = IndexManager::getKeyDataWithSize(attribute_, highKey_);
+    numEntriesReadInPage_++;
+
+    bool low_lt_current;
+    bool low_eq_current;
+    bool low_gt_current;
+    rc = compareKeyData(attribute_, get<0>(low), get<0>(current), low_lt_current, low_eq_current, low_gt_current);
+    if (rc != SUCCESS)
+        return rc;
+    bool withinLowBound = lowKeyInclusive_ ? low_eq_current || low_lt_current : low_lt_current;
+
+    bool current_lt_high;
+    bool current_eq_high;
+    bool current_gt_high;
+    rc = compareKeyData(attribute_, get<0>(current), get<0>(high), current_lt_high, current_eq_high, current_gt_high);
+    if (rc != SUCCESS)
+        return rc;
+    bool withinHighBound = highKeyInclusive_ ? current_eq_high || current_lt_high : current_lt_high;
+    
+    /* Our search in index of ALL leaf nodes looks like:
+     *     k1 | k2 | ... | kl | ... | ki | ... | kh | ... | k(n-2) | k(n-1)
+     * where
+     *   k1 = first key in index
+     *   kl = low key of search
+     *   ki = current key being scanned
+     *   kh = high key of search
+     *   k(n-1) = last key in index
+     *
+     * Recall that keys are in sorted order (by B+ tree properties, this is guaranteed).
+     *   If we've gone past kh (not within bounds), then all keys after kh are also not within bounds, so our search is done.
+     *   If we're not within bounds of kl, we haven't gone far enough, so keep searching.
+     *   If we're within bounds of kl and kh, we have a matching entry to return to the caller.
+     */
+    if (!withinHighBound)
+        return IX_EOF;
+    if (!withinLowBound)
+        return getNextEntry(rid, key);
+
+    rid = rids[i];
+    memcpy(key, get<0>(keysWithSizes[i]), get<1>(keysWithSizes[i]));
+    return SUCCESS;
+}
+
+// PageData must be a leaf which contains lowKey.
+RC IX_ScanIterator::open(IXFileHandle &ixfileHandle,
+        Attribute attribute,
+        void *lowKey,
+        void *highKey,
+        bool lowKeyInclusive,
+        bool highKeyInclusive,
+        void *pageData)
+{
+    closed_ = false;
+
+    ixfileHandle_ = ixfileHandle;
+    attribute_ = attribute;
+    lowKey_ = lowKey;
+    highKey_ = highKey;
+    lowKeyInclusive_ = lowKeyInclusive;
+    highKeyInclusive_ = highKeyInclusive;
+
+    currentPageData_ = pageData;
+    numEntriesReadInPage_ = 0;
+    return SUCCESS;
 }
 
 RC IX_ScanIterator::close()
 {
-    return -1;
+    closed_ = true;
+    free(currentPageData_);
+    return SUCCESS;
 }
 
 //------------------------------------------------------------------------------------------
@@ -796,23 +957,23 @@ IXFileHandle::~IXFileHandle()
 
 RC IXFileHandle::readPage(PageNum pageNum, void *data)
 {
-ixReadPageCounter++;
-RC rc = ufh->readPage(pageNum, data);
-return rc;
+    ixReadPageCounter++;
+    RC rc = ufh->readPage(pageNum, data);
+    return rc;
 }
 
 RC IXFileHandle::writePage(PageNum pageNum, const void *data)
 {
-ixWritePageCounter++;
-RC rc = ufh->writePage(pageNum, data);
-return rc;
+    ixWritePageCounter++;
+    RC rc = ufh->writePage(pageNum, data);
+    return rc;
 }
 
 RC IXFileHandle::appendPage(const void *data)
 {
-ixAppendPageCounter++;
-RC rc = ufh->appendPage(data);
-return rc;
+    ixAppendPageCounter++;
+    RC rc = ufh->appendPage(data);
+    return rc;
 }
 
 RC IXFileHandle::collectCounterValues(unsigned &readPageCount, unsigned &writePageCount, unsigned &appendPageCount)
