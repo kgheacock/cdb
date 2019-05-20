@@ -119,7 +119,9 @@ FileHandle::~FileHandle()
 
 RC FileHandle::readPage(PageNum pageNum, void *data)
 {
-    // If pageNum doesn't exist, error
+    if (_fd == nullptr)
+        return PFM_FILE_DN_EXIST;
+     // If pageNum doesn't exist, error
     if (getNumberOfPages() < pageNum)
         return FH_PAGE_DN_EXIST;
 

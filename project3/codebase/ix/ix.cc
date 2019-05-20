@@ -112,6 +112,10 @@ RC IndexManager::createFile(const string &fileName)
 
 RC IndexManager::destroyFile(const string &fileName)
 {
+    string rootFile = fileName + ".root";
+    RC rc = _pf_manager->destroyFile(rootFile);
+    if (rc != SUCCESS)
+       return rc;
     return _pf_manager->destroyFile(fileName);
 }
 
@@ -322,6 +326,8 @@ void IndexManager::insertEntryInPage(void *page, const void *key, const RID &rid
     //Set freespaceOffset
     freeSpaceOffset += entrySize;
     memcpy((char *)page + 5, &freeSpaceOffset, sizeof(uint32_t));
+    free(entryToInsert);
+    free(partToMove);
     free(entry);
     free(slotData);
 }
@@ -441,7 +447,7 @@ bool IndexManager::willEntryFit(const void *pageData, const void *val, const Att
 }
 
 void IndexManager::splitPage(IXFileHandle &ixfileHandle, const Attribute &attribute, void *inPage, tuple<void *, int> newChildEntry, int &newPageNumber, bool isLeafPage)
-{
+{/*
     int middleOfPage = (PAGE_SIZE / 2) - 1;
     uint32_t currentOffset = 0;
     uint32_t previousOffset = 0;
@@ -450,7 +456,7 @@ void IndexManager::splitPage(IXFileHandle &ixfileHandle, const Attribute &attrib
     void *slotData = malloc(PAGE_SIZE);
     while (getNextEntry(inPage, currentOffset, entryCount, filedValue, slotData, attribute, isLeafPage) != IX_EOF)
     {
-    }
+    }*/
 }
 RC IndexManager::getNextEntry(void *page, uint32_t &currentOffset, uint32_t &entryCount, void *fieldValue, void *slotData, const Attribute attr, bool isLeafPage)
 {
@@ -544,9 +550,9 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
             return SUCCESS;
         }
 
-        get<0>(newChild) = malloc(PAGE_SIZE);
-        int newPageNumber = -1;
-        splitPage(ixfileHandle, attribute, pageData, newChild, newPageNumber, false);
+        //get<0>(newChild) = malloc(PAGE_SIZE);
+        //int newPageNumber = -1;
+        //splitPage(ixfileHandle, attribute, pageData, newChild, newPageNumber, false);
         if (isRoot(nodePointer))
         {
             updateRoot(); // Change the global pointer, set the root to now point to the current pages.
@@ -568,10 +574,10 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
             return SUCCESS;
         }
 
-        newChild = malloc(PAGE_SIZE);
+        //newChild = malloc(PAGE_SIZE);
         //splitPage(pageData, newChild);
-        int newPageNumber = -1;
-        splitPage(ixfileHandle, attribute, pageData, newChild, newPageNumber);
+        //int newPageNumber = -1;
+        //splitPage(ixfileHandle, attribute, pageData, newChild, newPageNumber);
         free(pageData);
         return SUCCESS;
     }
