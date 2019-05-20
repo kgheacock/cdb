@@ -148,7 +148,7 @@ private:
     //Post: a new node will be allocated with the minimum value in the right child as the traffic cop. The left pointer of that traffic cop will point to leftChild
     void updateRoot(IXFileHandle &IXFileHandle, const int leftChild, const int rightChild, void *rightChildValue);
 
-    void splitPage(IXFileHandle &ixfileHandle, const Attribute &attribute, void *inPage, tuple<void *, int> newChildEntry, int &newPageNumber, bool isLeafPage);
+    RC splitPage(IXFileHandle &ixfileHandle, const Attribute &attribute, void *inPage, tuple<void *, int> newChildEntry, int pageNumber, bool isLeafPage);
 
     RC getNextEntry(void *page, uint32_t &currentOffset, uint32_t &entryCount, void *fieldValue, void *slotData, const Attribute attr, bool isLeafPage);
 
