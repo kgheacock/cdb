@@ -1,5 +1,8 @@
 
 #include "ix.h"
+#include <iostream>
+#include <tuple>
+using namespace std;
 
 IndexManager *IndexManager::_index_manager = 0;
 PagedFileManager *IndexManager::_pf_manager = 0;
@@ -143,6 +146,24 @@ bool IndexManager::isRoot(PageNum pageNumber)
     return pageNumber == rootPage;
 }
 
+HeaderLeaf IndexManager::getHeaderLeaf(const void *pageData)
+{
+    HeaderLeaf header;
+    memcpy(&(header.numEntries), (char *)pageData + POSITION_NUM_ENTRIES, SIZEOF_NUM_ENTRIES);
+    memcpy(&(header.freeSpaceOffset), (char *)pageData + POSITION_FREE_SPACE_OFFSET, SIZEOF_FREE_SPACE_OFFSET);
+    memcpy(&(header.leftSibling), (char *)pageData + POSITION_SIBLING_PAGENUM_LEFT, SIZEOF_SIBLING_PAGENUM);
+    memcpy(&(header.rightSibling), (char *)pageData + POSITION_SIBLING_PAGENUM_RIGHT, SIZEOF_SIBLING_PAGENUM);
+    return header;
+}
+
+void IndexManager::setHeaderLeaf(void *pageData, HeaderLeaf header)
+{
+    memcpy((char *)pageData + POSITION_NUM_ENTRIES, &(header.numEntries), SIZEOF_NUM_ENTRIES);
+    memcpy((char *)pageData + POSITION_FREE_SPACE_OFFSET, &(header.freeSpaceOffset), SIZEOF_FREE_SPACE_OFFSET);
+    memcpy((char *)pageData + POSITION_SIBLING_PAGENUM_LEFT, &(header.leftSibling), SIZEOF_SIBLING_PAGENUM);
+    memcpy((char *)pageData + POSITION_SIBLING_PAGENUM_RIGHT, &(header.rightSibling), SIZEOF_SIBLING_PAGENUM);
+}
+
 void IndexManager::insertEntryInPage(void *page, const void *key, const RID &rid, const Attribute &attr, bool isLeafNode)
 {
     //TODO: search the given page using IXFile_Iterator and find the correct position to insert either a Leaf entry
@@ -152,10 +173,12 @@ void IndexManager::insertEntryInPage(void *page, const void *key, const RID &rid
     if (isLeafNode)
     {
         //int offset = 0;
+        HeaderLeaf header = getHeaderLeaf(page);
+        size_t newFreeSpaceOffset;
         if (numEntries == 0)
         {
             size_t insertPosition = SIZEOF_HEADER_LEAF;
-            const size_t newFreeSpaceOffset = insertPosition + findLeafEntrySize(key, attr);
+            newFreeSpaceOffset = insertPosition + findLeafEntrySize(key, attr);
 
             // Write key.
             const size_t keySize = findKeySize(key, attr);
@@ -169,20 +192,17 @@ void IndexManager::insertEntryInPage(void *page, const void *key, const RID &rid
             // Write RID slotNum.
             memcpy((char *)page + insertPosition, &(rid.slotNum), sizeof(uint32_t));
             insertPosition += sizeof(uint32_t);
-
-            // Update free space offset.
-            memcpy((char *)page + POSITION_FREE_SPACE_OFFSET, &newFreeSpaceOffset, SIZEOF_FREE_SPACE_OFFSET);
-
         }
         else
         {
             //int freeSpaceOffset = findFreeSpaceOffset(page);
-
+            newFreeSpaceOffset = header.freeSpaceOffset;
         }
-    }
 
-    numEntries++;
-    memcpy((char *)page + POSITION_NUM_ENTRIES, &numEntries, SIZEOF_NUM_ENTRIES);
+        header.freeSpaceOffset = newFreeSpaceOffset;
+        header.numEntries = numEntries + 1;
+        setHeaderLeaf(page, header);
+    }
 }
 
 int IndexManager::findLeafEntrySize(const void *val, const Attribute attr)
@@ -362,6 +382,7 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
         if (willEntryFit(pageData, key, attribute, false))
         {
             insertEntryInPage(pageData, key, rid, attribute, false);
+            ixfileHandle.ufh->writePage(nodePointer, pageData);
             free(pageData);
             return SUCCESS;
         }
@@ -373,6 +394,7 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
         {
             updateRoot(); // Change the global pointer, set the root to now point to the current pages.
             insertEntryInPage(pageData, newChild, rid, attribute, false);
+            ixfileHandle.ufh->writePage(nodePointer, pageData);
             //TODO:: UPDATE root pointer global variable
         }
         free(pageData);
@@ -383,6 +405,7 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
         if (willEntryFit(pageData, key, attribute, true))
         {
             insertEntryInPage(pageData, key, rid, attribute, true);
+            ixfileHandle.ufh->writePage(nodePointer, pageData);
             free(pageData);
             return SUCCESS;
         }
@@ -411,8 +434,203 @@ RC IndexManager::scan(IXFileHandle &ixfileHandle,
     return -1;
 }
 
+vector<tuple<void *, int>> IndexManager::getDataEntriesWithSizes_leaf(const Attribute attribute, const void *pageData)
+{
+    vector<tuple<void *, int>> entriesWithSizes;
+
+    uint32_t numEntries = 0;
+    memcpy(&numEntries, (char *) pageData + POSITION_NUM_ENTRIES, SIZEOF_NUM_ENTRIES);
+
+    size_t firstEntryPosition = SIZEOF_HEADER_LEAF;
+    size_t offset = firstEntryPosition;
+
+    for (uint32_t i = 0; i < numEntries; i++)
+    {
+        void *entry = (char *)pageData + offset;
+        int entrySize = findLeafEntrySize(entry, attribute);
+        void *savedEntry = malloc(entrySize);
+        memcpy(savedEntry, entry, entrySize);
+        entriesWithSizes.push_back(make_tuple(savedEntry, entrySize));
+        offset += entrySize;
+    }
+
+    return entriesWithSizes;
+}
+
+vector<tuple<void *, int>> IndexManager::getKeysWithSizes_leaf(const Attribute attribute, vector<tuple<void *, int>> dataEntriesWithSizes)
+{
+    vector<tuple<void *, int>> keysWithSizes;
+    for (auto entryWithSize : dataEntriesWithSizes)
+    {
+        void *entry = get<0>(entryWithSize);
+        int keySize = findKeySize(entry, attribute);
+        void *savedKey = malloc(keySize);
+        memcpy(savedKey, entry, keySize);
+        keysWithSizes.push_back(make_tuple(savedKey, keySize));
+    }
+    return keysWithSizes;
+}
+
+vector<RID> IndexManager::getRIDs_leaf(const Attribute attribute, vector<tuple<void *, int>> dataEntriesWithSizes)
+{
+    vector<RID> rids;
+    for (auto entryWithSize : dataEntriesWithSizes)
+    {
+        void *entry = get<0>(entryWithSize);
+
+        int keySize = findKeySize(entry, attribute);
+        int ridPosition = keySize;
+        int pageNumPosition = ridPosition;
+        int slotNumPosition = pageNumPosition + sizeof(uint32_t);
+
+        uint32_t pageNumber;
+        uint32_t slotNumber;
+        memcpy(&pageNumber, (char *)entry + pageNumPosition, sizeof(uint32_t));
+        memcpy(&slotNumber, (char *)entry + slotNumPosition, sizeof(uint32_t));
+
+        RID rid;
+        rid.pageNum = pageNumber;
+        rid.slotNum = slotNumber;
+        rids.push_back(rid);
+    }
+    return rids;
+}
+
+
 void IndexManager::printBtree(IXFileHandle &ixfileHandle, const Attribute &attribute) const
 {
+    cout << '{' << endl;
+    printBtree(ixfileHandle, attribute, 0, rootPage);
+    cout << endl << '}' << endl;
+}
+
+void IndexManager::printBtree(IXFileHandle &ixfileHandle, const Attribute &attribute, uint32_t depth, PageNum pageNumber) const
+{
+    void *pageData = calloc(PAGE_SIZE, 1);
+    ixfileHandle.ufh->readPage(pageNumber, pageData);
+
+    if (isLeafPage(pageData))
+    {
+        printLeaf(ixfileHandle, attribute, depth, pageData);
+    }
+    else
+    {
+        printInterior(ixfileHandle, attribute, depth, pageData);
+    }
+
+    free(pageData);
+}
+
+void IndexManager::printLeaf(IXFileHandle &ixfileHandle, const Attribute &attribute, uint32_t depth, const void *pageData) const
+{
+    string indent (depth * 4, ' ');
+    cout << indent << "{\"keys\": ["; // Open leaf, open "keys" field.
+
+    void *prevKeyData = nullptr;
+    int prevKeySize = -1;
+
+    vector<tuple<void *, int>> dataEntriesWithSizes = getDataEntriesWithSizes_leaf(attribute, pageData);
+    vector<tuple<void *, int>> keysWithSizes = getKeysWithSizes_leaf(attribute, dataEntriesWithSizes);
+    vector<RID> rids = getRIDs_leaf(attribute, dataEntriesWithSizes);
+
+    for (auto it = dataEntriesWithSizes.begin(); it != dataEntriesWithSizes.end(); ++it)
+    {
+        int i = distance(dataEntriesWithSizes.begin(), it);
+        tuple<void *, int> keyDataWithSize = getKeyDataWithSize(attribute, get<0>(keysWithSizes[i]));
+        void *currKeyData = get<0>(keyDataWithSize);
+        int currKeySize = get<1>(keyDataWithSize);
+        RID currRID = rids[i];
+
+        if (prevKeyData == nullptr)
+        {
+            // Open key.
+            cout << "\"";
+            switch (attribute.type)
+            {
+            case TypeReal:
+                cout << *(float *) currKeyData;
+                break;
+            case TypeInt:
+                cout << *(int *) currKeyData;
+                break;
+            case TypeVarChar:
+                cout << (char *) currKeyData;
+                break;
+            }
+            cout << ":["; // Open key's values.
+        }
+        else
+        {
+            bool isNewKey = prevKeySize != currKeySize || memcmp(prevKeyData, currKeyData, currKeySize) != 0;
+            if (isNewKey)
+            {
+                cout << "]\""; // Close previous key.
+                cout << ','; // Join previous with current key.
+
+                // Open current key.
+                cout << "\"";
+                switch (attribute.type)
+                {
+                case TypeReal:
+                    cout << *(float *) currKeyData;
+                    break;
+                case TypeInt:
+                    cout << *(int *) currKeyData;
+                    break;
+                case TypeVarChar:
+                    cout << (char *) currKeyData;
+                    break;
+                }
+                cout << ":["; // Open current key's values.
+            }
+            else // Same key as last iteration.
+            {
+                cout << ','; // Continue with the current key's values.
+            }
+        }
+
+        cout << '(' << currRID.pageNum << ',' << currRID.slotNum << ')'; // Output RID for current key.
+
+        prevKeyData = currKeyData;
+        prevKeySize = currKeySize;
+
+    }
+
+    if (prevKeyData != nullptr)
+    {
+        cout << "]\""; // Close last key.
+    }
+
+    cout << indent << "]}"; // Close "keys" field, close leaf.
+}
+
+void IndexManager::printInterior(IXFileHandle &ixfileHandle, const Attribute &attribute, uint32_t depth, const void *pageData) const
+{
+
+}
+
+tuple<void *, int> IndexManager::getKeyDataWithSize(const Attribute attribute, const void *key)
+{
+    void *keyData = calloc(attribute.length + 1, sizeof(uint8_t)); // Null-term if attr is varchar.
+    int size = 0;
+
+    int offset = 0;
+    switch (attribute.type)
+    {
+    case TypeReal:
+    case TypeInt:
+        size = sizeof(uint32_t);
+        break;
+    case TypeVarChar:
+        memcpy(&size, key, sizeof(uint32_t));  // Get the size of string.
+        offset += sizeof(uint32_t);
+        break;
+
+    default:
+        break;
+    }
+    memcpy(keyData, (char *)key + offset, size);
+    return make_tuple(keyData, size);
 }
 
 bool IndexManager::isLeafPage(const void *page)

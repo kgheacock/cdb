@@ -36,8 +36,8 @@ typedef struct
 {
     uint32_t numEntries;
     uint32_t freeSpaceOffset;
-    PageNum leftSibling;
-    PageNum rightSibling;
+    int leftSibling;
+    int rightSibling;
 } HeaderLeaf;
 
 
@@ -48,6 +48,14 @@ class IndexManager
 
 public:
     static IndexManager *instance();
+
+    static vector<tuple<void *, int>> getDataEntriesWithSizes_leaf(const Attribute attribute, const void *pageData);
+    static vector<tuple<void *, int>> getKeysWithSizes_leaf(const Attribute attribute, vector<tuple<void *, int>> dataEntriesWithSizes);
+    static vector<RID> getRIDs_leaf(const Attribute attribute, vector<tuple<void *, int>> dataEntriesWithSizes);
+    static tuple<void *, int> getKeyDataWithSize(const Attribute attribute, const void *key);
+
+    static HeaderLeaf getHeaderLeaf(const void *pageData);
+    static void setHeaderLeaf(void *pageData, HeaderLeaf header);
 
     // Create an index file.
     RC createFile(const string &fileName);
@@ -78,6 +86,9 @@ public:
 
     // Print the B+ tree in pre-order (in a JSON record format)
     void printBtree(IXFileHandle &ixfileHandle, const Attribute &attribute) const;
+    void printBtree(IXFileHandle &ixfileHandle, const Attribute &attribute, uint32_t depth, PageNum pageNumber) const;
+    void printLeaf(IXFileHandle &ixfileHandle, const Attribute &attribute, uint32_t depth, const void *pageData) const;
+    void printInterior(IXFileHandle &ixfileHandle, const Attribute &attribute, uint32_t depth, const void *pageData) const;
 
     //Pre: page is a pointer to page data of any type
     //Post: the truth value of whether the page parameter is a leaf
