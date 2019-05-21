@@ -66,6 +66,7 @@ public:
     static HeaderLeaf getHeaderLeaf(const void *pageData);
     static void setHeaderLeaf(void *pageData, HeaderLeaf header);
 
+
     // Create an index file.
     RC createFile(const string &fileName);
 
@@ -83,6 +84,27 @@ public:
 
     // Delete an entry from the given index that is indicated by the given ixfileHandle.
     RC deleteEntry(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, const RID &rid);
+    RC deleteEntry_subtree(IXFileHandle &ixfileHandle,
+                           const Attribute attribute,
+                           const void *keyToDelete,
+                           const RID &ridToDelete,
+                           const void *oldChildKey,
+                           const int parentNodePageNum,
+                           const int currentNodePageNum);
+    RC deleteEntry_leaf(IXFileHandle &ixfileHandle,
+                        const Attribute attribute,
+                        const void *keyToDelete,
+                        const RID &ridToDelete,
+                        const void *oldChildKey,
+                        const int parentNodePageNum,
+                        const int currentNodePageNum);
+    RC deleteEntry_interior(IXFileHandle &ixfileHandle,
+                            const Attribute attribute,
+                            const void *keyToDelete,
+                            const RID &ridToDelete,
+                            const void *oldChildKey,
+                            const int parentNodePageNum,
+                            const int currentNodePageNum);
 
     // Initialize and IX_ScanIterator to support a range search
     RC scan(IXFileHandle &ixfileHandle,
@@ -103,6 +125,14 @@ public:
     //Post: the truth value of whether the page parameter is a leaf
     static bool isLeafPage(const void *page);
 
+    static bool isNodeUnderfull(const void *nodePageData);
+    
+    static int findIndexOfKeyWithRID(const Attribute attribute,
+                                     const vector<tuple<void *, int>> keysWithSizes,
+                                     const vector<RID> rids,
+                                     const void *targetKey,
+                                     const RID targetRID);
+    
 protected:
     IndexManager();
     ~IndexManager();

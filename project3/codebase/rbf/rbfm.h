@@ -30,8 +30,11 @@ typedef struct
 {
     uint32_t pageNum; // page number
     uint32_t slotNum; // slot number in the page
+    void print();
 } RID;
 
+bool operator==(const RID &x, const RID &y);
+bool operator!=(const RID &x, const RID &y);
 
 // Attribute
 typedef enum { TypeInt = 0, TypeReal, TypeVarChar } AttrType;

@@ -9,6 +9,21 @@
 
 #include "rbfm.h"
 
+void RID::print()
+{
+    cout << "<pid=" << pageNum << ", sid=" << slotNum << ">";
+}
+
+bool operator==(const RID &x, const RID &y)
+{
+    return x.pageNum == y.pageNum && x.slotNum == y.slotNum;
+}
+
+bool operator!=(const RID &x, const RID &y)
+{
+    return !(x == y);
+}
+
 RecordBasedFileManager* RecordBasedFileManager::_rbf_manager = NULL;
 PagedFileManager *RecordBasedFileManager::_pf_manager = NULL;
 

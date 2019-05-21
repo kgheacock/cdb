@@ -686,8 +686,158 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
         return SUCCESS;
     }
 }
+
 RC IndexManager::deleteEntry(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, const RID &rid)
 {
+    
+    return -1;
+}
+
+RC IndexManager::deleteEntry_subtree(IXFileHandle &ixfileHandle,
+                                     const Attribute attribute,
+                                     const void *keyToDelete,
+                                     const RID &ridToDelete,
+                                     const void *oldChildKey,
+                                     const int parentNodePageNum,
+                                     const int currentNodePageNum)
+{
+    void *currentNodePageData = malloc(PAGE_SIZE);
+    if (currentNodePageData == nullptr)
+        return -1;
+
+    auto rc = ixfileHandle.readPage(currentNodePageNum, currentNodePageData);
+    if (rc != SUCCESS)
+    {
+        free(currentNodePageData);
+        return rc;
+    }
+
+    bool isLeaf = isLeafPage(currentNodePageData);
+    free(currentNodePageData);
+
+    if (isLeaf)
+    {
+        return deleteEntry_leaf(ixfileHandle,
+                                attribute,
+                                keyToDelete,
+                                ridToDelete,
+                                oldChildKey,
+                                parentNodePageNum,
+                                currentNodePageNum);
+    }
+
+    return deleteEntry_interior(ixfileHandle,
+                                attribute,
+                                keyToDelete,
+                                ridToDelete,
+                                oldChildKey,
+                                parentNodePageNum,
+                                currentNodePageNum);
+}
+
+RC IndexManager::deleteEntry_leaf(IXFileHandle &ixfileHandle,
+                    const Attribute attribute,
+                    const void *keyToDelete,
+                    const RID &ridToDelete,
+                    const void *oldChildKey,
+                    const int parentNodePageNum,
+                    const int currentNodePageNum)
+{
+    void *currentNodePageData = malloc(PAGE_SIZE);
+    if (currentNodePageData == nullptr)
+        return -1;
+
+    auto rc = ixfileHandle.readPage(currentNodePageNum, currentNodePageData);
+    if (rc != SUCCESS)
+    {
+        free(currentNodePageData);
+        return rc;
+    }
+
+    HeaderLeaf header = getHeaderLeaf(currentNodePageData);
+    vector<tuple<void *, int>> dataEntriesWithSizes = getDataEntriesWithSizes_leaf(attribute, currentNodePageData);
+    vector<tuple<void *, int>> keysWithSizes = getKeysWithSizes_leaf(attribute, dataEntriesWithSizes);
+    vector<RID> rids = getRIDs_leaf(attribute, dataEntriesWithSizes);
+
+    if (!isNodeUnderfull(currentNodePageData))
+    {
+        int firstEntryPosition_start = SIZEOF_HEADER_LEAF;
+        int entryIndexToDelete = findIndexOfKeyWithRID(attribute, keysWithSizes, rids, keyToDelete, ridToDelete);
+
+        bool entryWasFound = entryIndexToDelete >= 0;
+        bool entryIsInPage = entryIndexToDelete < (int) header.numEntries;
+        bool canDeleteEntry = entryWasFound && entryIsInPage;
+        if (!canDeleteEntry)
+        {
+            free(currentNodePageData);
+            return -1;
+        }
+
+        int offset = firstEntryPosition_start;
+        for (int i = 0; i < entryIndexToDelete; i++)
+        {
+            int entrySize = get<1>(dataEntriesWithSizes[i]);
+            offset += entrySize;
+        }
+        int entryPositionToDelete_start = offset;
+        int entryPositionToDelete_size = get<1>(dataEntriesWithSizes[entryIndexToDelete]);
+        int entryPositionToDelete_end = entryPositionToDelete_start + entryPositionToDelete_size;
+
+        int lastEntryPosition_end = findFreeSpaceOffset(currentNodePageData);
+        int numBytesToShift = lastEntryPosition_end - entryPositionToDelete_end;
+
+        // Shift bytes after the deleted entry into its place.
+        memmove((char *) currentNodePageData + entryPositionToDelete_start,
+               (char *) currentNodePageData + entryPositionToDelete_end, 
+               numBytesToShift);
+
+        header.numEntries--;
+        header.freeSpaceOffset -= entryPositionToDelete_size;
+        setHeaderLeaf(currentNodePageData, header);
+        rc = ixfileHandle.writePage(currentNodePageNum, currentNodePageData);
+        free(currentNodePageData);
+        return rc;
+    }
+    return -1;
+}
+
+RC IndexManager::deleteEntry_interior(IXFileHandle &ixfileHandle,
+                        const Attribute attribute,
+                        const void *keyToDelete,
+                        const RID &ridToDelete,
+                        const void *oldChildKey,
+                        const int parentNodePageNum,
+                        const int currentNodePageNum)
+{
+    return -1;
+}
+
+int IndexManager::findIndexOfKeyWithRID(const Attribute attribute,
+                                        const vector<tuple<void *, int>> keysWithSizes,
+                                        const vector<RID> rids,
+                                        const void *targetKey,
+                                        const RID targetRID)
+{
+    tuple<void *, int> targetKeyDataWithSize = getKeyDataWithSize(attribute, targetKey);
+    void *targetKeyData = get<0>(targetKeyDataWithSize);
+
+    for (auto it = keysWithSizes.begin(); it != keysWithSizes.end(); it++)
+    {
+        int i = distance(keysWithSizes.begin(), it);
+        tuple<void *, int> keyDataWithSize = getKeyDataWithSize(attribute, get<0>(keysWithSizes[i]));
+        void *keyData = get<0>(keyDataWithSize);
+        RID rid = rids[i];
+
+        bool key_lt_target;
+        bool key_eq_target;
+        bool key_gt_target;
+        auto rc = compareKeyData(attribute, keyData, targetKeyData, key_lt_target, key_eq_target, key_gt_target);
+        if (rc != SUCCESS)
+            continue;
+
+        if (key_eq_target && rid == targetRID)
+            return i;
+    }
     return -1;
 }
 
@@ -943,6 +1093,20 @@ bool IndexManager::isLeafPage(const void *page)
     return isLeaf;
 }
 
+bool IndexManager::isNodeUnderfull(const void *nodePageData)
+{
+    int headerSize = isLeafPage(nodePageData) ? SIZEOF_HEADER_LEAF : SIZEOF_HEADER_INTERIOR;
+    int totalEntrySpace = PAGE_SIZE - headerSize;
+
+    int minimumThreshold = totalEntrySpace / 2;
+
+    int firstEntryPosition_start = headerSize;
+    int lastEntryPosition_end = findFreeSpaceOffset(nodePageData);
+    int usedEntrySpace = lastEntryPosition_end - firstEntryPosition_start;
+
+    return usedEntrySpace < minimumThreshold;
+}
+
 // NOTE: if keyData1 == nullptr, it is interpreted as -inf.  Similarly, if keyData2 == nullptr, it is interpreted as +inf.
 RC compareKeyData(const Attribute attr, const void *keyData1, const void *keyData2, bool &lt, bool &eq, bool &gt)
 {
@@ -1144,3 +1308,4 @@ RC IXFileHandle::collectCounterValues(unsigned &readPageCount, unsigned &writePa
 {
     return ufh->collectCounterValues(readPageCount, writePageCount, appendPageCount);
 }
+
