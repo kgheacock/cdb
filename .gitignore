@@ -37,3 +37,7 @@
 
 # Miscellaneous
 *.DS_Store
+*.root
+*.t
+*.swp
+*.gdb

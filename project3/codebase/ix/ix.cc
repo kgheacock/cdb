@@ -66,8 +66,8 @@ RC IndexManager::createEmptyPage(IXFileHandle &index_file, void *page, bool isLe
 
     // No existing empty page was found.
     // This is still OK.  We just need to append a page instead of writing directly to some page.
-    auto rc = index_file.appendPage(pageData);
     pageNumber = index_file.ufh->getNumberOfPages();
+    auto rc = index_file.appendPage(pageData);
     free(pageData);
     return rc;
 }
@@ -78,6 +78,7 @@ uint32_t IndexManager::findNumberOfEntries(const void *page)
     memcpy(&numberOfEntries, (char *)page + POSITION_NUM_ENTRIES, SIZEOF_NUM_ENTRIES);
     return numberOfEntries;
 }
+
 void IndexManager::updateRoot(IXFileHandle &ixFileHandle, tuple<void *, int> newChild, int leftChild, const Attribute &attr)
 {
     void *newRoot = malloc(PAGE_SIZE);
@@ -101,6 +102,7 @@ void IndexManager::updateRoot(IXFileHandle &ixFileHandle, tuple<void *, int> new
     ixFileHandle.writePage(newRootPageNum, newRoot);
     updateRootPageNumber(ixFileHandle.fileName, newRootPageNum);
 }
+
 RC IndexManager::createFile(const string &fileName)
 {
     IndexManager::fileName = fileName;
