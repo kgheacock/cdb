@@ -481,7 +481,7 @@ bool IndexManager::willEntryFit(const void *pageData, const void *val, const Att
 RC IndexManager::splitPage(void *prevPage, void *newPage, int prevPageNumber, int newPageNumber, const Attribute &attribute, tuple<void *, int> &newChildEntry, bool isLeafPage)
 {
     uint32_t middleOfPage = (PAGE_SIZE / 2) - 1;
-    uint32_t currentOffset = isLeafPage ? SIZEOF_HEADER_LEAF : SIZEOF_HEADER_INTERIOR;
+    uint32_t currentOffset = isLeafPage ? SIZEOF_HEADER_LEAF : SIZEOF_HEADER_INTERIOR + SIZEOF_CHILD_PAGENUM;
     uint32_t previousOffset = currentOffset;
     uint32_t entryCount = 0;
     uint32_t splitPoint = 0;
@@ -1058,7 +1058,7 @@ void IndexManager::printLeaf(IXFileHandle &ixfileHandle, const Attribute &attrib
         cout << "]\""; // Close last key.
     }
 
-    cout << indent << "]"; // Close "keys" field.
+    cout << "]"; // Close "keys" field.
 
     if (depth != 0)
     {
@@ -1068,7 +1068,73 @@ void IndexManager::printLeaf(IXFileHandle &ixfileHandle, const Attribute &attrib
 
 void IndexManager::printInterior(IXFileHandle &ixfileHandle, const Attribute &attribute, uint32_t depth, const void *pageData) const
 {
+    string indent(depth * 4, ' ');
+    cout << indent;
 
+    if (depth != 0)
+    {
+        cout << '{'; // Open node.
+    }
+
+    cout << "\"keys\": ["; // Open "keys" field.
+
+    bool hadPrevKey = false;
+
+    vector<tuple<void *, int>> keysWithSizes = getKeysWithSizes_interior(attribute, pageData);
+
+    for (auto it = keysWithSizes.begin(); it != keysWithSizes.end(); ++it)
+    {
+        tuple<void *, int> keyWithSize = *it;
+        tuple<void *, int> keyDataWithSize = getKeyDataWithSize(attribute, get<0>(keyWithSize));
+        void *currKeyData = get<0>(keyDataWithSize);
+
+        if (hadPrevKey)
+            cout << "\", "; // Join previous key and current key.
+
+        // Open key.
+        cout << "\"";
+        switch (attribute.type)
+        {
+        case TypeReal:
+            cout << *(float *)currKeyData;
+            break;
+        case TypeInt:
+            cout << *(int *)currKeyData;
+            break;
+        case TypeVarChar:
+            cout << (char *)currKeyData;
+            break;
+        default:
+            cout << "BAD_ATTR_TYPE";
+            break;
+        }
+
+        hadPrevKey = true;
+    }
+    cout << "\"]," << endl;; // Close last key, close "keys" field, join with "children" field.
+
+    cout << indent;
+    if (depth != 0)
+    {
+        cout << ' '; // Alignment of "children" under "keys".
+    }
+
+    vector<int> children = getChildPointers_interior(attribute, pageData);
+    cout << "\"children\": [" << endl; // Open "children" field.
+    bool hadPrevChild = false;
+    for (auto child : children)
+    {
+        if (hadPrevChild)
+            cout << ',' << endl;
+        printBtree(ixfileHandle, attribute, depth + 1, child);
+        hadPrevChild = true;
+    }
+    cout << endl << ']'; // Close "children" field.
+
+    if (depth != 0)
+    {
+        cout << '}'; // Close node.
+    }
 }
 
 tuple<void *, int> IndexManager::getKeyDataWithSize(const Attribute attribute, const void *key)
