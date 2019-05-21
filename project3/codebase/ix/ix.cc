@@ -78,7 +78,29 @@ uint32_t IndexManager::findNumberOfEntries(const void *page)
     memcpy(&numberOfEntries, (char *)page + POSITION_NUM_ENTRIES, SIZEOF_NUM_ENTRIES);
     return numberOfEntries;
 }
-
+void IndexManager::updateRoot(IXFileHandle &ixFileHandle, tuple<void *, int> newChild, int leftChild, const Attribute &attr)
+{
+    void *newRoot = malloc(PAGE_SIZE);
+    PageNum newRootPageNum = 0;
+    createEmptyPage(IXFileHandle, newRoot, false, newRootPageNum);
+    HeaderInterior newRootHeader = getHeaderInterior(newRoot);
+    int keySize = findKeySize(get<0>(newChild), attr);
+    newRootHeader.numEntries = 1;
+    int offset = SIZEOF_HEADER_INTERIOR;
+    //left child pointer
+    memcpy((char *)newRoot + offset, &leftChild, SIZEOF_CHILD_PAGENUM);
+    offset += SIZEOF_HEADER_INTERIOR;
+    //key value
+    memcpy((char *)newRoot + offset, get<0>(newChild), keySize);
+    offset += keySize;
+    //right child pointer
+    memcpy((char *)newRoot + offset, &(get<1>(newChild)), SIZEOF_CHILD_PAGENUM);
+    offset += SIZEOF_CHILD_PAGENUM;
+    newRootHeader.freeSpaceOffset = offset;
+    setHeaderInterior(newRoot, newRootHeader);
+    IXFileHandle.writePage(newRootPageNum, newRoot);
+    updateRootPageNumber(IXFileHandle->un)
+}
 RC IndexManager::createFile(const string &fileName)
 {
     IndexManager::fileName = fileName;
@@ -228,11 +250,6 @@ vector<int> IndexManager::getChildPointers_interior(const Attribute attribute, c
     return children;
 }
 
-bool IndexManager::isRoot(PageNum pageNumber)
-{
-    return pageNumber == rootPage;
-}
-
 HeaderInterior IndexManager::getHeaderInterior(const void *pageData)
 {
     HeaderInterior header;
@@ -265,19 +282,18 @@ void IndexManager::setHeaderLeaf(void *pageData, HeaderLeaf header)
     memcpy((char *)pageData + POSITION_SIBLING_PAGENUM_RIGHT, &(header.rightSibling), SIZEOF_SIBLING_PAGENUM);
 }
 
-void IndexManager::insertEntryInPage(void *page, const void *key, const RID &rid, const Attribute &attr, bool isLeafNodeconst, int rightChild = -1)
+void IndexManager::insertEntryInPage(void *page, const void *key, const RID &rid, const Attribute &attr, bool isLeafNodeconst, int rightChild /*= -1*/)
 {
     //TODO: search the given page using IXFile_Iterator and find the correct position to insert either a Leaf entry
     //      or TrafficCop entry into *page. Check to make sure it will fit first. If the position is in middle, make sure
     //      to not write over existing data. If iterator reaches EOF, the correct position is at the end
-    int entrySize = isLeafNodeconst ? findLeafEntrySize(key, attr) : findInteriorEntrySize(key, attr);
-    const int RID_SIZE = sizeof(uint32_t) * 2;
+    int entrySize = findKeySize(key, attr);
     void *entryToInsert = malloc(entrySize);
     if (isLeafNodeconst)
     {
         int offset = 0;
-        memcpy(entryToInsert, key, entrySize - RID_SIZE);
-        offset = entrySize - RID_SIZE;
+        memcpy(entryToInsert, key, entrySize);
+        offset = entrySize;
         memcpy((char *)entryToInsert + offset, &rid.pageNum, sizeof(uint32_t));
         offset += sizeof(uint32_t);
         memcpy((char *)entryToInsert + offset, &rid.slotNum, sizeof(uint32_t));
@@ -285,15 +301,15 @@ void IndexManager::insertEntryInPage(void *page, const void *key, const RID &rid
     else
     {
         int offset = 0;
-        memcpy(entryToInsert, key, entrySize - sizeof(uint32_t));
-        offset = entrySize - sizeof(uint32_t);
+        memcpy(entryToInsert, key, entrySize);
+        offset = entrySize;
         memcpy((char *)entryToInsert + offset, &rightChild, sizeof(uint32_t));
     }
     uint32_t offset = 0;
     uint32_t numberOfEntries = 0;
     void *entry = malloc(PAGE_SIZE);
     void *slotData = malloc(PAGE_SIZE);
-    int previousOffset = isLeafNodeconst ? SIZEOF_HEADER_LEAF : SIZEOF_HEADER_INTERIOR;
+    int previousOffset = isLeafNodeconst ? SIZEOF_HEADER_LEAF : SIZEOF_HEADER_INTERIOR + SIZEOF_CHILD_PAGENUM;
     //previous offset will contain the value of the offset that contains the greatest entry that is < than key
     while (getNextEntry(page, offset, numberOfEntries, entry, slotData, attr, isLeafNodeconst) != IX_EOF)
     {
@@ -315,16 +331,30 @@ void IndexManager::insertEntryInPage(void *page, const void *key, const RID &rid
         previousOffset = offset;
     }
     int freeSpaceOffset = findFreeSpaceOffset(page);
+    int fullEntrySize = isLeafNodeconst ? findLeafEntrySize(key, attr) : findInteriorEntrySize(key, attr);
     //Move everything from: previousOffset to freeSpaceOffset to: previousOffset + entrySize
-    void *partToMove = malloc(freeSpaceOffset - previousOffset);
+    void *partToMove = calloc(freeSpaceOffset - previousOffset, 1);
     memcpy(partToMove, (char *)page + previousOffset, freeSpaceOffset - previousOffset);
     //Copy new entry to page
-    memcpy((char *)page + previousOffset, entryToInsert, entrySize);
+    memcpy((char *)page + previousOffset, entryToInsert, fullEntrySize);
     //Recopy the previously saved part
-    memcpy((char *)page + previousOffset + entrySize, partToMove, freeSpaceOffset - previousOffset);
+    memcpy((char *)page + previousOffset + fullEntrySize, partToMove, freeSpaceOffset - previousOffset);
     //Set freespaceOffset
-    freeSpaceOffset += entrySize;
-    memcpy((char *)page + 5, &freeSpaceOffset, sizeof(uint32_t));
+    freeSpaceOffset += fullEntrySize;
+    if (isLeafNodeconst)
+    {
+        HeaderLeaf header = getHeaderLeaf(page);
+        header.numEntries += 1;
+        header.freeSpaceOffset = freeSpaceOffset;
+        setHeaderLeaf(page, header);
+    }
+    else
+    {
+        HeaderInterior header = getHeaderInterior(page);
+        header.numEntries += 1;
+        header.freeSpaceOffset = freeSpaceOffset;
+        setHeaderInterior(page, header);
+    }
     free(entry);
     free(slotData);
 }
@@ -423,11 +453,6 @@ RC IndexManager::updateRootPageNumber(const string indexFileName, const PageNum 
     return SUCCESS;
 }
 
-RC IndexManager::updateRoot()
-{
-    return -1;
-}
-
 bool IndexManager::willEntryFit(const void *pageData, const void *val, const Attribute attr, bool isLeafValue)
 {
     int freeSpaceOffset = IndexManager::findFreeSpaceOffset(pageData);
@@ -443,7 +468,7 @@ bool IndexManager::willEntryFit(const void *pageData, const void *val, const Att
     return entrySize + freeSpaceOffset < PAGE_SIZE;
 }
 
-RC IndexManager::splitPage(IXFileHandle &ixfileHandle, const Attribute &attribute, void *inPage, tuple<void *, int> newChildEntry, int pageNumber, bool isLeafPage)
+RC IndexManager::splitPage(void *prevPage, void *newPage, int prevPageNumber, int newPageNumber, const Attribute &attribute, tuple<void *, int> newChildEntry, bool isLeafPage)
 {
     uint32_t middleOfPage = (PAGE_SIZE / 2) - 1;
     uint32_t currentOffset = isLeafPage ? SIZEOF_HEADER_INTERIOR : SIZEOF_HEADER_LEAF;
@@ -453,7 +478,7 @@ RC IndexManager::splitPage(IXFileHandle &ixfileHandle, const Attribute &attribut
     void *keyValue = malloc(PAGE_SIZE);
     void *slotData = malloc(PAGE_SIZE);
     int firstHalfEntries = 0;
-    while (getNextEntry(inPage, currentOffset, entryCount, keyValue, slotData, attribute, isLeafPage) != IX_EOF)
+    while (getNextEntry(prevPage, currentOffset, entryCount, keyValue, slotData, attribute, isLeafPage) != IX_EOF)
     {
 
         if (currentOffset > middleOfPage)
@@ -465,57 +490,58 @@ RC IndexManager::splitPage(IXFileHandle &ixfileHandle, const Attribute &attribut
         firstHalfEntries++;
     }
     free(slotData);
-    void *newPage = malloc(PAGE_SIZE);
-    PageNum newPageNumber = 0;
     if (isLeafPage)
     {
-        int leftChildSize = findLeafEntrySize(keyValue, attribute);
-        memcpy(get<0>(newChildEntry), keyValue, leftChildSize - sizeof(uint32_t) * 2 /* pageNum + slotNum*/);
-        HeaderLeaf prevHeader = getHeaderLeaf(inPage);
-        HeaderLeaf *nextHeader = new HeaderLeaf();
-        createEmptyPage(ixfileHandle, newPage, isLeafPage, newPageNumber);
+        int leftChildSize = findKeySize(keyValue, attribute);
+        memcpy(get<0>(newChildEntry), keyValue, leftChildSize);
         get<1>(newChildEntry) = newPageNumber;
-        int newPageOffset = SIZEOF_HEADER_LEAF;
-        memcpy((char *)newPage + newPageOffset, (char *)inPage + splitPoint, PAGE_SIZE - splitPoint);
-        nextHeader->leftSibling = pageNumber;
-        nextHeader->rightSibling = prevHeader.rightSibling;
-        nextHeader->numEntries = prevHeader.numEntries - firstHalfEntries;
-        nextHeader->freeSpaceOffset = prevHeader.freeSpaceOffset - splitPoint + SIZEOF_HEADER_LEAF;
+
+        HeaderLeaf prevHeader = getHeaderLeaf(prevPage);
+        HeaderLeaf nextHeader = getHeaderLeaf(newPage);
+
+        memcpy((char *)newPage + SIZEOF_HEADER_LEAF, (char *)prevPage + splitPoint + SIZEOF_HEADER_LEAF, prevHeader.freeSpaceOffset - splitPoint);
+        memset((char *)prevPage + splitPoint, 0, prevHeader.freeSpaceOffset - splitPoint);
+        nextHeader.leftSibling = prevPageNumber;
+        nextHeader.rightSibling = prevHeader.rightSibling;
+        nextHeader.numEntries = prevHeader.numEntries - firstHalfEntries;
+        nextHeader.freeSpaceOffset = prevHeader.freeSpaceOffset - splitPoint + SIZEOF_HEADER_LEAF;
         prevHeader.rightSibling = newPageNumber;
         prevHeader.numEntries = firstHalfEntries;
         prevHeader.freeSpaceOffset = splitPoint;
-        setHeaderLeaf(inPage, prevHeader);
-        setHeaderLeaf(newPage, *nextHeader);
-        delete (nextHeader);
+        setHeaderLeaf(prevPage, prevHeader);
+        setHeaderLeaf(newPage, nextHeader);
     }
     else
     {
-        HeaderInterior prevHeader = getHeaderInterior(inPage);
-        HeaderInterior *nextHeader = new HeaderInterior();
-        int leftChildSize = findInteriorEntrySize(keyValue, attribute);
-        memcpy(get<0>(newChildEntry), keyValue, leftChildSize - sizeof(uint32_t) /* pagePointer*/);
-        createEmptyPage(ixfileHandle, newPage, isLeafPage, newPageNumber);
+        /*                    0            splitPoint   splitPoint + leftEntrySize      prevHeader.offset
+         * currentPageLayout: | prevPage       | newChild.key        | newPage                | 
+         */
+        HeaderInterior prevHeader = getHeaderInterior(prevPage);
+        HeaderInterior newHeader = getHeaderInterior(newPage);
+        int leftEntrySize = findKeySize(keyValue, attribute);
+        memcpy(get<0>(newChildEntry), keyValue, leftEntrySize);
         get<1>(newChildEntry) = newPageNumber;
-        get<1>(newChildEntry) = newPageNumber;
-        int newPageOffset = SIZEOF_HEADER_INTERIOR;
-        memcpy((char *)newPage + newPageOffset, (char *)inPage + splitPoint, PAGE_SIZE - splitPoint);
-        nextHeader->numEntries = prevHeader.numEntries - firstHalfEntries;
-        nextHeader->freeSpaceOffset = prevHeader.freeSpaceOffset - splitPoint + SIZEOF_HEADER_LEAF;
+        memcpy((char *)newPage + SIZEOF_HEADER_INTERIOR, (char *)prevPage + splitPoint + leftEntrySize, prevHeader.freeSpaceOffset - splitPoint + leftEntrySize);
+        memset((char *)prevPage, 0, prevHeader.freeSpaceOffset - splitPoint);
+        newHeader.numEntries = prevHeader.numEntries - firstHalfEntries;
+        newHeader.freeSpaceOffset = (prevHeader.freeSpaceOffset - splitPoint - leftEntrySize) + SIZEOF_HEADER_INTERIOR;
         prevHeader.numEntries = firstHalfEntries;
         prevHeader.freeSpaceOffset = splitPoint;
-        setHeaderInterior(inPage, prevHeader);
-        setHeaderInterior(newPage, *nextHeader);
-        delete (nextHeader);
+        setHeaderInterior(prevPage, prevHeader);
+        setHeaderInterior(newPage, newHeader);
     }
-    auto rc = ixfileHandle.writePage(newPageNumber, newPage);
-    free(newPage);
-    return rc;
+    free(keyValue);
+    return SUCCESS;
 }
+
+//NOTE:: fieldValue and slotData must be of size PAGE_SIZE so they can be zero-ed each time. bad design. my bad.
 RC IndexManager::getNextEntry(void *page, uint32_t &currentOffset, uint32_t &entryCount, void *fieldValue, void *slotData, const Attribute attr, bool isLeafPage)
 {
+    memset(fieldValue, 0, PAGE_SIZE);
+    memset(slotData, 0, PAGE_SIZE);
     if (currentOffset == 0)
     {
-        currentOffset = findFreeSpaceOffset(page);
+        currentOffset = isLeafPage ? SIZEOF_HEADER_LEAF : SIZEOF_HEADER_INTERIOR + SIZEOF_CHILD_PAGENUM;
     }
     if (entryCount == findNumberOfEntries(page))
         return IX_EOF;
@@ -569,10 +595,9 @@ RC IndexManager::getNextEntry(void *page, uint32_t &currentOffset, uint32_t &ent
     entryCount++;
     return SUCCESS;
 }
-//IN PROGRESS
 RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, const RID &rid, int nodePointer, tuple<void *, int> &newChild)
 {
-    void *pageData = malloc(PAGE_SIZE);
+    void *pageData = malloc(PAGE_SIZE * 2);
     if (pageData == nullptr)
         return -1;
 
@@ -585,37 +610,48 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
 
     if (!isLeafPage(pageData))
     {
-        int pagePointer = findTrafficCop(key, attribute, pageData); //if page is empty return -1
-        //if pagePointer is -1
+        int pagePointer = findTrafficCop(key, attribute, pageData);
         insertToTree(ixfileHandle, attribute, key, rid, pagePointer, newChild);
         if (get<0>(newChild) == nullptr)
         {
             free(pageData);
             return SUCCESS;
         }
-
-        if (willEntryFit(pageData, get<0>(newChild), attribute, false))
+        else
         {
-            RID temp;
-            insertEntryInPage(pageData, get<0>(newChild), temp, attribute, false, get<1>(newChild));
-            ixfileHandle.writePage(nodePointer, pageData);
-            free(pageData);
-            return SUCCESS;
+            if (willEntryFit(pageData, get<0>(newChild), attribute, false))
+            {
+                RID temp;
+                insertEntryInPage(pageData, get<0>(newChild), temp, attribute, false, get<1>(newChild));
+                ixfileHandle.writePage(nodePointer, pageData);
+                free(pageData);
+                free(get<0>(newChild));
+                get<0>(newChild) = nullptr;
+                return SUCCESS;
+            }
+            else
+            {
+                PageNum newPageNumber = 0;
+                RID temp;
+                void *newPage = malloc(PAGE_SIZE);
+                insertEntryInPage(pageData, get<0>(newChild), temp, attribute, false, get<1>(newChild));
+                //Page is now overfull so it must be split
+                createEmptyPage(ixfileHandle, newPage, false, newPageNumber);
+                splitPage(pageData, newPage, nodePointer, newPageNumber, attribute, newChild, false);
+                ixfileHandle.writePage(nodePointer, pageData);
+                ixfileHandle.writePage(newPageNumber, newPage);
+                if (isRoot(nodePointer))
+                {
+                    updateRoot(ixfileHandle, newChild, nodePointer, attribute);
+                    //TODO:: UPDATE root pointer global variable
+                }
+                free(pageData);
+                free(newPage);
+                free(get<0>(newChild));
+                get<0>(newChild) = nullptr;
+                return SUCCESS;
+            }
         }
-
-        get<0>(newChild) = malloc(PAGE_SIZE);
-        int newPageNumber = -1;
-        splitPage(ixfileHandle, attribute, pageData, newChild, newPageNumber, false);
-        if (isRoot(nodePointer))
-        {
-            updateRoot(); // Change the global pointer, set the root to now point to the current pages.
-            insertEntryInPage(pageData, get<0>(newChild), rid, attribute, false);
-            ixfileHandle.writePage(nodePointer, pageData);
-            //TODO:: UPDATE root pointer global variable
-        }
-        free(pageData);
-        //free(newChild);
-        return SUCCESS;
     }
     else // Leaf page.
     {
@@ -628,9 +664,13 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
         }
 
         get<0>(newChild) = nullptr;
-        //splitPage(pageData, newChild);
-        int newPageNumber = -1;
-        splitPage(ixfileHandle, attribute, pageData, newChild, nodePointer, newPageNumber);
+        insertEntryInPage(pageData, key, rid, attribute, true);
+        //page is now overfull
+        PageNum newPageNumber = 0;
+        void *newPage = malloc(PAGE_SIZE);
+
+        createEmptyPage(ixfileHandle, newPage, true, newPageNumber);
+        splitPage(pageData, newPage, nodePointer, newPageNumber, attribute, newChild, true);
         free(pageData);
         return SUCCESS;
     }

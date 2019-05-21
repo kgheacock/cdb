@@ -21,6 +21,7 @@ const size_t SIZEOF_HEADER_INTERIOR = SIZEOF_IS_LEAF + SIZEOF_NUM_ENTRIES + SIZE
 const size_t POSITION_IS_LEAF = 0;
 const size_t POSITION_NUM_ENTRIES = POSITION_IS_LEAF + SIZEOF_IS_LEAF;
 const size_t POSITION_FREE_SPACE_OFFSET = POSITION_NUM_ENTRIES + SIZEOF_NUM_ENTRIES;
+const size_t POSITION_CHILD_PAGENUM = POSITION_FREE_SPACE_OFFSET + SIZEOF_FREE_SPACE_OFFSET;
 const size_t POSITION_SIBLING_PAGENUM_LEFT = POSITION_FREE_SPACE_OFFSET + SIZEOF_FREE_SPACE_OFFSET;
 const size_t POSITION_SIBLING_PAGENUM_RIGHT = POSITION_SIBLING_PAGENUM_LEFT + SIZEOF_SIBLING_PAGENUM;
 
@@ -143,20 +144,17 @@ private:
     //Pre: *page contains the page where *key will be written. attr corresponds to key and isLeafNode tells
     //      whether page is a leaf page
     //Post: *page will be searched and key (which is in the correct format) will be placed in the correct position
-    void insertEntryInPage(void *page, const void *key, const RID &rid, const Attribute &attr, bool isLeafNodeconst, int rightChild /*= -1*/);
+    void insertEntryInPage(void *page, const void *key, const RID &rid, const Attribute &attr, bool isLeafNodeconst, int rightChild = -1);
 
-    //Post: a new node will be allocated with the minimum value in the right child as the traffic cop. The left pointer of that traffic cop will point to leftChild
-    void updateRoot(IXFileHandle &IXFileHandle, const int leftChild, const int rightChild, void *rightChildValue);
+    void updateRoot(IXFileHandle &IXFileHandle, tuple<void *, int> newChild, int leftChild, const Attribute &attr);
 
-    RC splitPage(IXFileHandle &ixfileHandle, const Attribute &attribute, void *inPage, tuple<void *, int> newChildEntry, int pageNumber, bool isLeafPage);
+    RC splitPage(void *prevPage, void *newPage, int prevPageNumber, int newPageNumber, const Attribute &attribute, tuple<void *, int> newChildEntry, bool isLeafPage);
 
     RC getNextEntry(void *page, uint32_t &currentOffset, uint32_t &entryCount, void *fieldValue, void *slotData, const Attribute attr, bool isLeafPage);
 
     RC insertToTree(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, const RID &rid, int nodePointer, tuple<void *, int> &newChild);
 
     bool isRoot(PageNum pageNumber);
-
-    RC updateRoot();
     RC getRootPageNumber(const string indexFileName);
     RC updateRootPageNumber(const string indexFileName, const PageNum newRoot);
 };
