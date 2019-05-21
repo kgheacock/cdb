@@ -166,6 +166,7 @@ public:
     unsigned ixReadPageCounter;
     unsigned ixWritePageCounter;
     unsigned ixAppendPageCounter;
+    string fileName;
     FileHandle *ufh;
 
     // Read, write, and append functions to update counters

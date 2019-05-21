@@ -99,7 +99,7 @@ void IndexManager::updateRoot(IXFileHandle &ixFileHandle, tuple<void *, int> new
     newRootHeader.freeSpaceOffset = offset;
     setHeaderInterior(newRoot, newRootHeader);
     ixFileHandle.writePage(newRootPageNum, newRoot);
-    //updateRootPageNumber();
+    updateRootPageNumber(ixFileHandle.fileName, newRootPageNum);
 }
 RC IndexManager::createFile(const string &fileName)
 {
@@ -147,6 +147,7 @@ RC IndexManager::destroyFile(const string &fileName)
 RC IndexManager::openFile(const string &fileName, IXFileHandle &ixfileHandle)
 {
     auto rc = getRootPageNumber(fileName);
+    ixfileHandle.fileName = fileName;
     if (rc != SUCCESS)
         return rc;
     return _pf_manager->openFile(fileName.c_str(), *ixfileHandle.ufh);
@@ -539,7 +540,10 @@ RC IndexManager::splitPage(void *prevPage, void *newPage, int prevPageNumber, in
     free(keyValue);
     return SUCCESS;
 }
-
+bool IndexManager::isRoot(PageNum pageNumber)
+{
+    return pageNumber == rootPage;
+}
 //NOTE:: fieldValue and slotData must be of size PAGE_SIZE so they can be zero-ed each time. bad design. my bad.
 RC IndexManager::getNextEntry(void *page, uint32_t &currentOffset, uint32_t &entryCount, void *fieldValue, void *slotData, const Attribute attr, bool isLeafPage)
 {
@@ -649,7 +653,6 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
                 if (isRoot(nodePointer))
                 {
                     updateRoot(ixfileHandle, newChild, nodePointer, attribute);
-                    //TODO:: UPDATE root pointer global variable
                 }
                 free(pageData);
                 free(newPage);
