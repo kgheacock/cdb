@@ -814,7 +814,14 @@ void IndexManager::printBtree(IXFileHandle &ixfileHandle, const Attribute &attri
 void IndexManager::printLeaf(IXFileHandle &ixfileHandle, const Attribute &attribute, uint32_t depth, const void *pageData) const
 {
     string indent(depth * 4, ' ');
-    cout << indent << "{\"keys\": ["; // Open leaf, open "keys" field.
+    cout << indent;
+
+    if (depth != 0)
+    {
+        cout << '{'; // Open leaf.
+    }
+
+    cout << "\"keys\": ["; // Open "keys" field.
 
     void *prevKeyData = nullptr;
     int prevKeySize = -1;
@@ -890,7 +897,12 @@ void IndexManager::printLeaf(IXFileHandle &ixfileHandle, const Attribute &attrib
         cout << "]\""; // Close last key.
     }
 
-    cout << indent << "]}"; // Close "keys" field, close leaf.
+    cout << indent << "]"; // Close "keys" field.
+
+    if (depth != 0)
+    {
+        cout << '}'; // Close leaf.
+    }
 }
 
 void IndexManager::printInterior(IXFileHandle &ixfileHandle, const Attribute &attribute, uint32_t depth, const void *pageData) const
