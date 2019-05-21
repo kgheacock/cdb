@@ -90,7 +90,7 @@ void IndexManager::updateRoot(IXFileHandle &ixFileHandle, tuple<void *, int> new
     int offset = SIZEOF_HEADER_INTERIOR;
     //left child pointer
     memcpy((char *)newRoot + offset, &leftChild, SIZEOF_CHILD_PAGENUM);
-    offset += SIZEOF_HEADER_INTERIOR;
+    offset += SIZEOF_CHILD_PAGENUM;
     //key value
     memcpy((char *)newRoot + offset, get<0>(newChild), keySize);
     offset += keySize;
@@ -101,6 +101,7 @@ void IndexManager::updateRoot(IXFileHandle &ixFileHandle, tuple<void *, int> new
     setHeaderInterior(newRoot, newRootHeader);
     ixFileHandle.writePage(newRootPageNum, newRoot);
     updateRootPageNumber(ixFileHandle.fileName, newRootPageNum);
+    free(newRoot);
 }
 
 RC IndexManager::createFile(const string &fileName)
@@ -477,11 +478,11 @@ bool IndexManager::willEntryFit(const void *pageData, const void *val, const Att
     return entrySize + freeSpaceOffset < PAGE_SIZE;
 }
 
-RC IndexManager::splitPage(void *prevPage, void *newPage, int prevPageNumber, int newPageNumber, const Attribute &attribute, tuple<void *, int> newChildEntry, bool isLeafPage)
+RC IndexManager::splitPage(void *prevPage, void *newPage, int prevPageNumber, int newPageNumber, const Attribute &attribute, tuple<void *, int> &newChildEntry, bool isLeafPage)
 {
     uint32_t middleOfPage = (PAGE_SIZE / 2) - 1;
-    uint32_t currentOffset = isLeafPage ? SIZEOF_HEADER_INTERIOR : SIZEOF_HEADER_LEAF;
-    uint32_t previousOffset = isLeafPage ? SIZEOF_HEADER_INTERIOR : SIZEOF_HEADER_LEAF;
+    uint32_t currentOffset = isLeafPage ? SIZEOF_HEADER_LEAF : SIZEOF_HEADER_INTERIOR;
+    uint32_t previousOffset = currentOffset;
     uint32_t entryCount = 0;
     uint32_t splitPoint = 0;
     void *keyValue = malloc(PAGE_SIZE);
@@ -674,7 +675,7 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
             return SUCCESS;
         }
 
-        get<0>(newChild) = nullptr;
+        get<0>(newChild) = malloc(PAGE_SIZE);
         insertEntryInPage(pageData, key, rid, attribute, true);
         //page is now overfull
         PageNum newPageNumber = 0;
@@ -682,7 +683,15 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
 
         createEmptyPage(ixfileHandle, newPage, true, newPageNumber);
         splitPage(pageData, newPage, nodePointer, newPageNumber, attribute, newChild, true);
+        rc = ixfileHandle.writePage(nodePointer, pageData);
+        if (rc != SUCCESS)
+            return rc;
+        rc = ixfileHandle.writePage(newPageNumber, newPage);
+        if (rc != SUCCESS)
+            return rc;
+        updateRoot(ixfileHandle, newChild, nodePointer, attribute);
         free(pageData);
+        free(newPage);
         return SUCCESS;
     }
 }
@@ -1059,6 +1068,7 @@ void IndexManager::printLeaf(IXFileHandle &ixfileHandle, const Attribute &attrib
 
 void IndexManager::printInterior(IXFileHandle &ixfileHandle, const Attribute &attribute, uint32_t depth, const void *pageData) const
 {
+
 }
 
 tuple<void *, int> IndexManager::getKeyDataWithSize(const Attribute attribute, const void *key)
