@@ -948,25 +948,11 @@ RC compareKeyData(const Attribute attr, const void *keyData1, const void *keyDat
 {
     bool negativeInf = keyData1 == nullptr;
     bool positiveInf = keyData2 == nullptr;
-    if (negativeInf && positiveInf)
+    if (negativeInf || positiveInf)
     {
-        lt = true;  // -inf < +inf
-        eq = false; // -inf != +inf
-        gt = false; // -inf !> +inf
-        return SUCCESS;
-    }
-    else if (negativeInf)
-    {
-        lt = false; // -inf < x
-        eq = false; // -inf != x
-        gt = true;  // -inf !> x
-        return SUCCESS;
-    }
-    else if (positiveInf) // x ? +inf
-    {
-        lt = true;  // x < +inf
-        eq = false; // x != +inf
-        gt = false; // x !> +inf
+        lt = true;  // -inf <  +inf, -inf <  x, x <  +inf
+        eq = false; // -inf != +inf, -inf != x, x != +inf
+        gt = false; // -inf !> +inf, -inf !> x, x !> +inf
         return SUCCESS;
     }
 
@@ -1131,7 +1117,6 @@ IXFileHandle::IXFileHandle()
 
 IXFileHandle::~IXFileHandle()
 {
-    delete (ufh);
 }
 
 RC IXFileHandle::readPage(PageNum pageNum, void *data)
