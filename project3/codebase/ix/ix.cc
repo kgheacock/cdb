@@ -82,7 +82,7 @@ void IndexManager::updateRoot(IXFileHandle &ixFileHandle, tuple<void *, int> new
 {
     void *newRoot = malloc(PAGE_SIZE);
     PageNum newRootPageNum = 0;
-    createEmptyPage(IXFileHandle, newRoot, false, newRootPageNum);
+    createEmptyPage(ixFileHandle, newRoot, false, newRootPageNum);
     HeaderInterior newRootHeader = getHeaderInterior(newRoot);
     int keySize = findKeySize(get<0>(newChild), attr);
     newRootHeader.numEntries = 1;
@@ -98,8 +98,8 @@ void IndexManager::updateRoot(IXFileHandle &ixFileHandle, tuple<void *, int> new
     offset += SIZEOF_CHILD_PAGENUM;
     newRootHeader.freeSpaceOffset = offset;
     setHeaderInterior(newRoot, newRootHeader);
-    IXFileHandle.writePage(newRootPageNum, newRoot);
-    updateRootPageNumber(IXFileHandle->un)
+    ixFileHandle.writePage(newRootPageNum, newRoot);
+    //updateRootPageNumber();
 }
 RC IndexManager::createFile(const string &fileName)
 {
@@ -137,6 +137,10 @@ RC IndexManager::createFile(const string &fileName)
 
 RC IndexManager::destroyFile(const string &fileName)
 {
+    string rootFile = fileName + ".root";
+    RC rc = _pf_manager->destroyFile(rootFile);
+    if (rc != SUCCESS)
+        return rc;
     return _pf_manager->destroyFile(fileName);
 }
 
@@ -355,6 +359,8 @@ void IndexManager::insertEntryInPage(void *page, const void *key, const RID &rid
         header.freeSpaceOffset = freeSpaceOffset;
         setHeaderInterior(page, header);
     }
+    free(entryToInsert);
+    free(partToMove);
     free(entry);
     free(slotData);
 }

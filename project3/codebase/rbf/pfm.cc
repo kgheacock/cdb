@@ -119,7 +119,9 @@ FileHandle::~FileHandle()
 
 RC FileHandle::readPage(PageNum pageNum, void *data)
 {
-    // If pageNum doesn't exist, error
+    if (_fd == nullptr)
+        return PFM_FILE_DN_EXIST;
+     // If pageNum doesn't exist, error
     if (getNumberOfPages() < pageNum)
         return FH_PAGE_DN_EXIST;
 
@@ -138,6 +140,8 @@ RC FileHandle::readPage(PageNum pageNum, void *data)
 
 RC FileHandle::writePage(PageNum pageNum, const void *data)
 {
+    if (_fd == nullptr)
+        return PFM_FILE_DN_EXIST;
     // Check if the page exists
     if (getNumberOfPages() < pageNum)
         return FH_PAGE_DN_EXIST;
@@ -161,6 +165,8 @@ RC FileHandle::writePage(PageNum pageNum, const void *data)
 
 RC FileHandle::appendPage(const void *data)
 {
+    if (_fd == nullptr)
+        return PFM_FILE_DN_EXIST;
     // Seek to the end of the file
     if (fseek(_fd, 0, SEEK_END))
         return FH_SEEK_FAILED;
@@ -178,6 +184,8 @@ RC FileHandle::appendPage(const void *data)
 
 unsigned FileHandle::getNumberOfPages()
 {
+    if (_fd == nullptr)
+        return 0;
     // Use stat to get the file size
     struct stat sb;
     if (fstat(fileno(_fd), &sb) != 0)
