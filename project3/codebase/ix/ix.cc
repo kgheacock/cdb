@@ -689,8 +689,10 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
 
 RC IndexManager::deleteEntry(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, const RID &rid)
 {
-    
-    return -1;
+    void *oldChildKey = nullptr;
+    int parentNodePageNum = -1;
+    int currentNodePageNum = rootPage;
+    return deleteEntry_subtree(ixfileHandle, attribute, key, rid, oldChildKey, parentNodePageNum, currentNodePageNum);
 }
 
 RC IndexManager::deleteEntry_subtree(IXFileHandle &ixfileHandle,
@@ -736,12 +738,12 @@ RC IndexManager::deleteEntry_subtree(IXFileHandle &ixfileHandle,
 }
 
 RC IndexManager::deleteEntry_leaf(IXFileHandle &ixfileHandle,
-                    const Attribute attribute,
-                    const void *keyToDelete,
-                    const RID &ridToDelete,
-                    const void *oldChildKey,
-                    const int parentNodePageNum,
-                    const int currentNodePageNum)
+                                  const Attribute attribute,
+                                  const void *keyToDelete,
+                                  const RID &ridToDelete,
+                                  const void *oldChildKey,
+                                  const int parentNodePageNum,
+                                  const int currentNodePageNum)
 {
     void *currentNodePageData = malloc(PAGE_SIZE);
     if (currentNodePageData == nullptr)
@@ -759,7 +761,7 @@ RC IndexManager::deleteEntry_leaf(IXFileHandle &ixfileHandle,
     vector<tuple<void *, int>> keysWithSizes = getKeysWithSizes_leaf(attribute, dataEntriesWithSizes);
     vector<RID> rids = getRIDs_leaf(attribute, dataEntriesWithSizes);
 
-    if (!isNodeUnderfull(currentNodePageData))
+    if ((uint32_t) currentNodePageNum == rootPage || !isNodeUnderfull(currentNodePageData))
     {
         int firstEntryPosition_start = SIZEOF_HEADER_LEAF;
         int entryIndexToDelete = findIndexOfKeyWithRID(attribute, keysWithSizes, rids, keyToDelete, ridToDelete);
@@ -788,8 +790,8 @@ RC IndexManager::deleteEntry_leaf(IXFileHandle &ixfileHandle,
 
         // Shift bytes after the deleted entry into its place.
         memmove((char *) currentNodePageData + entryPositionToDelete_start,
-               (char *) currentNodePageData + entryPositionToDelete_end, 
-               numBytesToShift);
+                (char *) currentNodePageData + entryPositionToDelete_end, 
+                numBytesToShift);
 
         header.numEntries--;
         header.freeSpaceOffset -= entryPositionToDelete_size;
@@ -802,12 +804,12 @@ RC IndexManager::deleteEntry_leaf(IXFileHandle &ixfileHandle,
 }
 
 RC IndexManager::deleteEntry_interior(IXFileHandle &ixfileHandle,
-                        const Attribute attribute,
-                        const void *keyToDelete,
-                        const RID &ridToDelete,
-                        const void *oldChildKey,
-                        const int parentNodePageNum,
-                        const int currentNodePageNum)
+                                      const Attribute attribute,
+                                      const void *keyToDelete,
+                                      const RID &ridToDelete,
+                                      const void *oldChildKey,
+                                      const int parentNodePageNum,
+                                      const int currentNodePageNum)
 {
     return -1;
 }
