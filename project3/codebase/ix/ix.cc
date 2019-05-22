@@ -4,6 +4,8 @@
 #include <tuple>
 using namespace std;
 
+
+
 IndexManager *IndexManager::_index_manager = 0;
 PagedFileManager *IndexManager::_pf_manager = 0;
 
@@ -254,20 +256,12 @@ RC IndexManager::findTrafficCop(const void *val, const Attribute attr, const voi
         free(targetTrafficCop);
         return -1;
     }
-    // fix lamba function syntax
-    auto freeKeys = [=]() 
-    {
-        for_each(keysWithSizes.begin(), keysWithSizes.end(), [](tuple<void *, int> keyWithSize))
-        { 
-            free(get<0>(keyWithSize));
-        } 
-    };
 
     vector<int> children = getChildPointers_interior(attr, pageData);
     if (children.empty())
     {
         free(targetTrafficCop);
-        freeKeys();
+        freeKeysWithSizes(keysWithSizes);
         return -1;
     }
 
@@ -281,7 +275,7 @@ RC IndexManager::findTrafficCop(const void *val, const Attribute attr, const voi
         if (currentTrafficCop == nullptr)
         {
             free(targetTrafficCop);
-            freeKeys();
+            freeKeysWithSizes(keysWithSizes);
             return -1;
         }
 
@@ -295,21 +289,21 @@ RC IndexManager::findTrafficCop(const void *val, const Attribute attr, const voi
         if (rc != SUCCESS)
         {
             free(targetTrafficCop);
-            freeKeys();
+            freeKeysWithSizes(keysWithSizes);
             return rc;
         }
 
         if (target_lt_current)
         {
             free(targetTrafficCop);
-            freeKeys();
+            freeKeysWithSizes(keysWithSizes);
             trafficCop = child;
             return SUCCESS;
         }
     }
 
     free(targetTrafficCop);
-    freeKeys();
+    freeKeysWithSizes(keysWithSizes);
     trafficCop = children.back();
     return SUCCESS;
 }
@@ -335,7 +329,8 @@ vector<tuple<void *, int>> IndexManager::getKeysWithSizes_interior(const Attribu
         int keySize = entrySize - SIZEOF_CHILD_PAGENUM;        // Each "entry" is key + pagenum for child with keys >= (i.e. the right child).
         void *savedKey = calloc(keySize + 1, sizeof(uint8_t)); // Safety (+1) is for reading null-term if attribute is VarChar.
         memcpy(savedKey, entry, keySize);
-        keysWithSizes.push_back(make_tuple(savedKey, keySize));
+        tuple<void *, int> keyWithSize = make_tuple(savedKey, keySize);
+        keysWithSizes.push_back(keyWithSize);
         offset += entrySize;
     }
 
@@ -419,18 +414,20 @@ RC IndexManager::insertEntryInPage(void *page, const void *key, const RID &rid, 
     //TODO: search the given page using IXFile_Iterator and find the correct position to insert either a Leaf entry
     //      or TrafficCop entry into *page. Check to make sure it will fit first. If the position is in middle, make sure
     //      to not write over existing data. If iterator reaches EOF, the correct position is at the end
-    int entrySize = findKeySize(key, attr); // TODO: should this be entrySize for interior/leaf instead of keySize?
+    int entrySize = isLeafPage(page) ? findLeafEntrySize(key, attr) : findInteriorEntrySize(key, attr); // TODO: should this be entrySize for interior/leaf instead of keySize?
     if (entrySize < 0)
         return -1;
-    void *entryToInsert = malloc(entrySize);
+    void *entryToInsert = calloc(entrySize, sizeof(uint8_t));
     if (entryToInsert == nullptr)
         return -1;
+
+    int keySize = findKeySize(key, attr);
 
     if (isLeafNodeconst)
     {
         int offset = 0;
-        memcpy((char *)entryToInsert + offset, key, entrySize);
-        offset += entrySize;
+        memcpy((char *)entryToInsert + offset, key, keySize);
+        offset += keySize;
         memcpy((char *)entryToInsert + offset, &rid.pageNum, sizeof(uint32_t));
         offset += sizeof(uint32_t);
         memcpy((char *)entryToInsert + offset, &rid.slotNum, sizeof(uint32_t));
@@ -438,8 +435,8 @@ RC IndexManager::insertEntryInPage(void *page, const void *key, const RID &rid, 
     else
     {
         int offset = 0;
-        memcpy((char *)entryToInsert + offset, key, entrySize);
-        offset += entrySize;
+        memcpy((char *)entryToInsert + offset, key, keySize);
+        offset += keySize;
         memcpy((char *)entryToInsert + offset, &rightChild, sizeof(uint32_t));
     }
 
@@ -491,21 +488,20 @@ RC IndexManager::insertEntryInPage(void *page, const void *key, const RID &rid, 
         bool entry_eq_key;
         bool entry_gt_key;
         rc = compareKeyData(attr, entryData, keyData, entry_lt_key, entry_eq_key, entry_gt_key);
+
+        free(entryData);
+
         if (rc != SUCCESS)
         {
             free(entryToInsert);
             free(entry);
             free(slotData);
             free(keyData);
-            free(entryData);
             return rc;
         }
 
         if (entry_eq_key || entry_gt_key)
-        {
-            free(entryData);
             break;
-        }
 
         previousOffset = offset;
     }
@@ -589,7 +585,7 @@ int IndexManager::findInteriorEntrySize(const void *val, const Attribute attr)
     if (keySize < 0)
         return -1;
 
-    int rightPageNumSize = sizeof(uint32_t); // Key must also have corresponding right pointer to child.
+    int rightPageNumSize = SIZEOF_CHILD_PAGENUM; // Key must also have corresponding right pointer to child.
     return keySize + rightPageNumSize;
 }
 
@@ -621,12 +617,37 @@ int IndexManager::findKeySize(const void *val, const Attribute attr)
 
 RC IndexManager::findFreeSpaceOffset(const void *pageData, size_t &freeSpaceOffset)
 {
+    size_t headerSize;
+    RC rc;
+    if (isLeafPage(pageData))
+    {
+        headerSize = SIZEOF_HEADER_LEAF;
+        HeaderLeaf header;
+        rc = getHeaderLeaf(pageData, header);
+        if (rc != SUCCESS)
+            return rc;
+        freeSpaceOffset = header.freeSpaceOffset;
+    }
+    else
+    {
+        headerSize = SIZEOF_HEADER_INTERIOR;
+        HeaderInterior header;
+        rc = getHeaderInterior(pageData, header);
+        if (rc != SUCCESS)
+            return rc;
+        freeSpaceOffset = header.freeSpaceOffset;
+    }
+    if (freeSpaceOffset < headerSize || freeSpaceOffset > PAGE_SIZE)
+        return -1;
+    return SUCCESS;
+    /*
     memcpy(&freeSpaceOffset, (char *)pageData + POSITION_FREE_SPACE_OFFSET, SIZEOF_FREE_SPACE_OFFSET);
 
     size_t headerSize = isLeafPage(pageData) ? SIZEOF_HEADER_LEAF : SIZEOF_HEADER_INTERIOR;
     if (freeSpaceOffset < headerSize || freeSpaceOffset > PAGE_SIZE)
         return -1;
     return SUCCESS;
+    */
 }
 
 RC IndexManager::getRootPageNumber(const string indexFileName)
@@ -696,7 +717,16 @@ RC IndexManager::splitPage(void *prevPage, void *newPage, int prevPageNumber, in
     uint32_t entryCount = 0;
     uint32_t splitPoint = 0;
     void *keyValue = malloc(PAGE_SIZE);
+    if (keyValue == nullptr)
+        return -1;
+
     void *slotData = malloc(PAGE_SIZE);
+    if (slotData == nullptr)
+    {
+        free(keyValue);
+        return -1;
+    }
+
     int firstHalfEntries = 0;
     while (getNextEntry(prevPage, currentOffset, entryCount, keyValue, slotData, attribute, isLeafPage) != IX_EOF)
     {
@@ -716,7 +746,10 @@ RC IndexManager::splitPage(void *prevPage, void *newPage, int prevPageNumber, in
     {
         int leftChildSize = findLeafEntrySize(keyValue, attribute);
         if (leftChildSize < 0)
+        {
+            free(keyValue);
             return -1;
+        }
 
         memcpy(get<0>(newChildEntry), keyValue, leftChildSize);
         get<1>(newChildEntry) = newPageNumber;
@@ -724,12 +757,18 @@ RC IndexManager::splitPage(void *prevPage, void *newPage, int prevPageNumber, in
         HeaderLeaf prevHeader;
         rc = getHeaderLeaf(prevPage, prevHeader);
         if (rc != SUCCESS)
+        {
+            free(keyValue);
             return rc;
+        }
 
         HeaderLeaf nextHeader;
         rc = getHeaderLeaf(newPage, nextHeader);
         if (rc != SUCCESS)
+        {
+            free(keyValue);
             return rc;
+        }
 
         size_t numBytesForSplitEntries = prevHeader.freeSpaceOffset - splitPoint;
         memcpy((char *)newPage + SIZEOF_HEADER_LEAF, (char *)prevPage + splitPoint, numBytesForSplitEntries);
@@ -754,16 +793,25 @@ RC IndexManager::splitPage(void *prevPage, void *newPage, int prevPageNumber, in
         HeaderInterior prevHeader;
         rc = getHeaderInterior(prevPage, prevHeader);
         if (rc != SUCCESS)
+        {
+            free(keyValue);
             return rc;
+        }
 
         HeaderInterior newHeader;
         rc = getHeaderInterior(newPage, newHeader);
         if (rc != SUCCESS)
+        {
+            free(keyValue);
             return rc;
+        }
 
         int leftEntrySize = findInteriorEntrySize(keyValue, attribute);
         if (leftEntrySize < 0)
+        {
+            free(keyValue);
             return -1;
+        }
 
         memcpy(get<0>(newChildEntry), keyValue, leftEntrySize);
         get<1>(newChildEntry) = newPageNumber;
@@ -919,9 +967,18 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
                 if (rc != SUCCESS)
                     return rc;
 
-                splitPage(pageData, newPage, nodePointer, newPageNumber, attribute, newChild, false);
-                ixfileHandle.writePage(nodePointer, pageData);
-                ixfileHandle.writePage(newPageNumber, newPage);
+                rc = splitPage(pageData, newPage, nodePointer, newPageNumber, attribute, newChild, false);
+                if (rc != SUCCESS)
+                    return rc;
+
+                rc = ixfileHandle.writePage(nodePointer, pageData);
+                if (rc != SUCCESS)
+                    return rc;
+
+                rc = ixfileHandle.writePage(newPageNumber, newPage);
+                if (rc != SUCCESS)
+                    return rc;
+
                 if (isRoot(nodePointer))
                 {
                     rc = updateRoot(ixfileHandle, newChild, nodePointer, attribute);
@@ -947,20 +1004,29 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
         {
             rc = insertEntryInPage(pageData, key, rid, attribute, true);
             if (rc != SUCCESS)
+            {
+                free(pageData);
                 return rc;
+            }
 
             rc = ixfileHandle.writePage(nodePointer, pageData);
-            if (rc != SUCCESS)
-                return rc;
-
             free(pageData);
-            return SUCCESS;
+            return rc;
         }
 
         get<0>(newChild) = malloc(PAGE_SIZE);
+        if (get<0>(newChild) == nullptr)
+        {
+            free(pageData);
+            return -1;
+        }
+
         rc = insertEntryInPage(pageData, key, rid, attribute, true); // This updated our numEntries and freeSpaceOffset.
         if (rc != SUCCESS)
+        {
+            free(get<0>(newChild));
             return rc;
+        }
 
         //page is now overfull
         PageNum newPageNumber = 0;
@@ -968,23 +1034,36 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
 
         rc = createEmptyPage(ixfileHandle, newPage, true, newPageNumber);
         if (rc != SUCCESS)
+        {
+            free(get<0>(newChild));
             return rc;
+        }
 
         splitPage(pageData, newPage, nodePointer, newPageNumber, attribute, newChild, true);
+
         rc = ixfileHandle.writePage(nodePointer, pageData);
         if (rc != SUCCESS)
+        {
+            free(get<0>(newChild));
+            free(pageData);
+            free(newPage);
             return rc;
+        }
+
         rc = ixfileHandle.writePage(newPageNumber, newPage);
         if (rc != SUCCESS)
+        {
+            free(get<0>(newChild));
+            free(pageData);
+            free(newPage);
             return rc;
+        }
 
         rc = updateRoot(ixfileHandle, newChild, nodePointer, attribute);
-        if (rc != SUCCESS)
-            return rc;
-
+        free(get<0>(newChild));
         free(pageData);
         free(newPage);
-        return SUCCESS;
+        return rc;
     }
 }
 
@@ -1066,10 +1145,33 @@ RC IndexManager::deleteEntry_leaf(IXFileHandle &ixfileHandle,
     }
 
     vector<tuple<void *, int>> dataEntriesWithSizes = getDataEntriesWithSizes_leaf(attribute, currentNodePageData);
+    if (dataEntriesWithSizes.empty())
+    {
+        free(currentNodePageData);
+        return -1;
+    }
+
     vector<tuple<void *, int>> keysWithSizes = getKeysWithSizes_leaf(attribute, dataEntriesWithSizes);
+    if (keysWithSizes.empty())
+    {
+        free(currentNodePageData);
+        freeDataEntriesWithSizes(dataEntriesWithSizes);
+        return -1;
+    }
+
     vector<RID> rids = getRIDs_leaf(attribute, dataEntriesWithSizes);
 
-    if ((uint32_t) currentNodePageNum == rootPage || !isNodeUnderfull(currentNodePageData))
+    bool isUnderfull;
+    rc = isNodeUnderfull(currentNodePageData, isUnderfull);
+    if (rc != SUCCESS)
+    {
+        free(currentNodePageData);
+        freeDataEntriesWithSizes(dataEntriesWithSizes);
+        freeKeysWithSizes(keysWithSizes);
+        return rc;
+    }
+
+    if ((uint32_t) currentNodePageNum == rootPage || !isUnderfull)
     {
         int firstEntryPosition_start = SIZEOF_HEADER_LEAF;
         int entryIndexToDelete = findIndexOfKeyWithRID(attribute, keysWithSizes, rids, keyToDelete, ridToDelete);
@@ -1080,6 +1182,8 @@ RC IndexManager::deleteEntry_leaf(IXFileHandle &ixfileHandle,
         if (!canDeleteEntry)
         {
             free(currentNodePageData);
+            freeDataEntriesWithSizes(dataEntriesWithSizes);
+            freeKeysWithSizes(keysWithSizes);
             return -1;
         }
 
@@ -1096,7 +1200,12 @@ RC IndexManager::deleteEntry_leaf(IXFileHandle &ixfileHandle,
         size_t freeSpaceOffset;
         rc = findFreeSpaceOffset(currentNodePageData, freeSpaceOffset);
         if (rc != SUCCESS)
+        {
+            free(currentNodePageData);
+            freeDataEntriesWithSizes(dataEntriesWithSizes);
+            freeKeysWithSizes(keysWithSizes);
             return rc;
+        }
         int lastEntryPosition_end = freeSpaceOffset;
 
         int numBytesToShift = lastEntryPosition_end - entryPositionToDelete_end;
@@ -1111,8 +1220,13 @@ RC IndexManager::deleteEntry_leaf(IXFileHandle &ixfileHandle,
         setHeaderLeaf(currentNodePageData, header);
         rc = ixfileHandle.writePage(currentNodePageNum, currentNodePageData);
         free(currentNodePageData);
+        freeDataEntriesWithSizes(dataEntriesWithSizes);
+        freeKeysWithSizes(keysWithSizes);
         return rc;
     }
+    free(currentNodePageData);
+    freeDataEntriesWithSizes(dataEntriesWithSizes);
+    freeKeysWithSizes(keysWithSizes);
     return -1;
 }
 
@@ -1139,20 +1253,35 @@ int IndexManager::findIndexOfKeyWithRID(const Attribute attribute,
     for (auto it = keysWithSizes.begin(); it != keysWithSizes.end(); it++)
     {
         int i = distance(keysWithSizes.begin(), it);
+
+        RID rid = rids[i];
+
         tuple<void *, int> keyDataWithSize = getKeyDataWithSize(attribute, get<0>(keysWithSizes[i]));
         void *keyData = get<0>(keyDataWithSize);
-        RID rid = rids[i];
+        if (keyData == nullptr)
+        {
+            free(targetKeyData);
+            return -1;
+        }
 
         bool key_lt_target;
         bool key_eq_target;
         bool key_gt_target;
         auto rc = compareKeyData(attribute, keyData, targetKeyData, key_lt_target, key_eq_target, key_gt_target);
         if (rc != SUCCESS)
+        {
+            free(keyData);
             continue;
+        }
 
         if (key_eq_target && rid == targetRID)
+        {
+            free(targetKeyData);
+            free(keyData);
             return i;
+        }
     }
+    free(targetKeyData);
     return -1;
 }
 
@@ -1234,7 +1363,8 @@ vector<tuple<void *, int>> IndexManager::getKeysWithSizes_leaf(const Attribute a
             continue;
         void *savedKey = malloc(keySize);
         memcpy(savedKey, entry, keySize);
-        keysWithSizes.push_back(make_tuple(savedKey, keySize));
+        tuple<void *, int> keyWithSize = make_tuple(savedKey, keySize);
+        keysWithSizes.push_back(keyWithSize);
     }
     return keysWithSizes;
 }
@@ -1309,10 +1439,11 @@ void IndexManager::printLeaf(IXFileHandle &ixfileHandle, const Attribute &attrib
     vector<tuple<void *, int>> dataEntriesWithSizes = getDataEntriesWithSizes_leaf(attribute, pageData);
     vector<tuple<void *, int>> keysWithSizes = getKeysWithSizes_leaf(attribute, dataEntriesWithSizes);
     vector<RID> rids = getRIDs_leaf(attribute, dataEntriesWithSizes);
+    freeDataEntriesWithSizes(dataEntriesWithSizes);
 
-    for (auto it = dataEntriesWithSizes.begin(); it != dataEntriesWithSizes.end(); ++it)
+    for (auto it = keysWithSizes.begin(); it != keysWithSizes.end(); ++it)
     {
-        int i = distance(dataEntriesWithSizes.begin(), it);
+        int i = distance(keysWithSizes.begin(), it);
         tuple<void *, int> keyDataWithSize = getKeyDataWithSize(attribute, get<0>(keysWithSizes[i]));
         void *currKeyData = get<0>(keyDataWithSize);
         int currKeySize = get<1>(keyDataWithSize);
@@ -1370,7 +1501,10 @@ void IndexManager::printLeaf(IXFileHandle &ixfileHandle, const Attribute &attrib
 
         prevKeyData = currKeyData;
         prevKeySize = currKeySize;
+        free(currKeyData);
     }
+
+    freeKeysWithSizes(keysWithSizes);
 
     if (prevKeyData != nullptr)
     {
@@ -1430,6 +1564,7 @@ void IndexManager::printInterior(IXFileHandle &ixfileHandle, const Attribute &at
 
         hadPrevKey = true;
     }
+    freeKeysWithSizes(keysWithSizes);
 
     if (hadPrevKey)
     {
@@ -1507,7 +1642,7 @@ RC IndexManager::isNodeUnderfull(const void *nodePageData, bool &isUnderfull)
 
     int firstEntryPosition_start = headerSize;
 
-    int freeSpaceOffset;
+    size_t freeSpaceOffset;
     auto rc = findFreeSpaceOffset(nodePageData, freeSpaceOffset);
     if (rc != SUCCESS)
         return rc;
@@ -1606,6 +1741,7 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
     vector<tuple<void *, int>> dataEntriesWithSizes = IndexManager::getDataEntriesWithSizes_leaf(attribute_, currentPageData_);
     vector<tuple<void *, int>> keysWithSizes = IndexManager::getKeysWithSizes_leaf(attribute_, dataEntriesWithSizes);
     vector<RID> rids = IndexManager::getRIDs_leaf(attribute_, dataEntriesWithSizes);
+    freeDataEntriesWithSizes(dataEntriesWithSizes);
 
     int i = numEntriesReadInPage_; // if we've read entries [0, i), we must now read entry i.
 
@@ -1630,6 +1766,10 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
         return rc;
     bool withinHighBound = highKeyInclusive_ ? current_eq_high || current_lt_high : current_lt_high;
 
+    free(get<0>(current));
+    free(get<0>(low));
+    free(get<0>(high));
+
     /* Our search in index of ALL leaf nodes looks like:
      *     k1 | k2 | ... | kl | ... | ki | ... | kh | ... | k(n-2) | k(n-1)
      * where
@@ -1651,6 +1791,7 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
 
     rid = rids[i];
     memcpy(key, get<0>(keysWithSizes[i]), get<1>(keysWithSizes[i]));
+    freeKeysWithSizes(keysWithSizes);
     return SUCCESS;
 }
 
@@ -1723,5 +1864,26 @@ RC IXFileHandle::appendPage(const void *data)
 RC IXFileHandle::collectCounterValues(unsigned &readPageCount, unsigned &writePageCount, unsigned &appendPageCount)
 {
     return ufh->collectCounterValues(readPageCount, writePageCount, appendPageCount);
+}
+
+
+void freeKeysWithSizes(vector<tuple<void *, int>> keysWithSizes)
+{
+    for (auto it = keysWithSizes.begin(); it != keysWithSizes.end(); it++)
+    {
+        tuple<void *, int> keyWithSize = *it;
+        void *key = get<0>(keyWithSize);
+        free(key);
+    }
+}
+
+void freeDataEntriesWithSizes(vector<tuple<void *, int>> dataEntriesWithSizes)
+{
+    for (auto it = dataEntriesWithSizes.begin(); it != dataEntriesWithSizes.end(); it++)
+    {
+        tuple<void *, int> entryWithSize = *it;
+        void *entry = get<0>(entryWithSize);
+        free(entry);
+    }
 }
 

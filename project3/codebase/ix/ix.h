@@ -126,7 +126,7 @@ public:
     //Post: the truth value of whether the page parameter is a leaf
     static bool isLeafPage(const void *page);
 
-    static bool isNodeUnderfull(const void *nodePageData);
+    static RC isNodeUnderfull(const void *nodePageData, bool &isUnderfull);
     
     static int findIndexOfKeyWithRID(const Attribute attribute,
                                      const vector<tuple<void *, int>> keysWithSizes,
@@ -252,5 +252,7 @@ public:
 };
 
 RC compareKeyData(const Attribute attr, const void *keyData1, const void *keyData2, bool &lt, bool &eq, bool &gt);
+void freeKeysWithSizes(vector<tuple<void *, int>> keysWithSizes);
+void freeDataEntriesWithSizes(vector<tuple<void *, int>> dataEntriesWithSizes);
 
 #endif
