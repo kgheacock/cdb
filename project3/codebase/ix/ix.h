@@ -67,7 +67,6 @@ public:
     static RC getHeaderLeaf(const void *pageData, HeaderLeaf &header);
     static void setHeaderLeaf(void *pageData, const HeaderLeaf header);
 
-
     // Create an index file.
     RC createFile(const string &fileName);
 
@@ -127,13 +126,13 @@ public:
     static bool isLeafPage(const void *page);
 
     static bool isNodeUnderfull(const void *nodePageData);
-    
+
     static int findIndexOfKeyWithRID(const Attribute attribute,
                                      const vector<tuple<void *, int>> keysWithSizes,
                                      const vector<RID> rids,
                                      const void *targetKey,
                                      const RID targetRID);
-    
+
 protected:
     IndexManager();
     ~IndexManager();
@@ -186,6 +185,7 @@ private:
     RC insertToTree(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, const RID &rid, int nodePointer, tuple<void *, int> &newChild);
 
     bool isRoot(PageNum pageNumber);
+    bool areRIDsEqual(const RID &rid1, const RID &rid2);
     RC getRootPageNumber(const string indexFileName);
     RC updateRootPageNumber(const string indexFileName, const PageNum newRoot);
 };
