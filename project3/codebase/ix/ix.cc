@@ -176,11 +176,7 @@ int IndexManager::findTrafficCop(const void *val, const Attribute attr, const vo
     vector<tuple<void *, int>> keysWithSizes = getKeysWithSizes_interior(attr, pageData);
     vector<int> children = getChildPointers_interior(attr, pageData);
 
-    // Give priority to first child on null value.
-    if (val == nullptr)
-        return children.empty() ? -1 : children.front();
-
-    for (auto it = children.begin(); it != children.end(); ++it)
+    for (auto it = children.begin(); it + 1 != children.end(); ++it)
     {
         int i = distance(children.begin(), it);
 
@@ -188,15 +184,14 @@ int IndexManager::findTrafficCop(const void *val, const Attribute attr, const vo
         tuple<void *, int> currentTrafficCopWithSize = getKeyDataWithSize(attr, get<0>(keysWithSizes[i]));
         void *currentTrafficCop = get<0>(currentTrafficCopWithSize);
 
-        bool lt;
-        bool eq;
-        bool gt;
-        auto rc = compareKeyData(attr, targetTrafficCop, currentTrafficCop, lt, eq, gt);
+        bool target_lt_current;
+        bool target_eq_current;
+        bool target_gt_current;
+        auto rc = compareKeyData(attr, targetTrafficCop, currentTrafficCop, target_lt_current, target_eq_current, target_gt_current);
         if (rc != SUCCESS)
             return rc;
 
-        bool target_gteq_current = eq || gt;
-        if (!target_gteq_current)
+        if (target_lt_current)
             return child;
     }
     return children.empty() ? -1 : children.back();
@@ -503,19 +498,20 @@ RC IndexManager::splitPage(void *prevPage, void *newPage, int prevPageNumber, in
     free(slotData);
     if (isLeafPage)
     {
-        int leftChildSize = findKeySize(keyValue, attribute);
+        int leftChildSize = findLeafEntrySize(keyValue, attribute);
         memcpy(get<0>(newChildEntry), keyValue, leftChildSize);
         get<1>(newChildEntry) = newPageNumber;
 
         HeaderLeaf prevHeader = getHeaderLeaf(prevPage);
         HeaderLeaf nextHeader = getHeaderLeaf(newPage);
 
-        memcpy((char *)newPage + SIZEOF_HEADER_LEAF, (char *)prevPage + splitPoint + SIZEOF_HEADER_LEAF, prevHeader.freeSpaceOffset - splitPoint);
-        memset((char *)prevPage + splitPoint, 0, prevHeader.freeSpaceOffset - splitPoint);
+        size_t numBytesForSplitEntries = prevHeader.freeSpaceOffset - splitPoint;
+        memcpy((char *)newPage + SIZEOF_HEADER_LEAF, (char *)prevPage + splitPoint, numBytesForSplitEntries);
+        memset((char *)prevPage + splitPoint, 0, numBytesForSplitEntries);
         nextHeader.leftSibling = prevPageNumber;
         nextHeader.rightSibling = prevHeader.rightSibling;
         nextHeader.numEntries = prevHeader.numEntries - firstHalfEntries;
-        nextHeader.freeSpaceOffset = prevHeader.freeSpaceOffset - splitPoint + SIZEOF_HEADER_LEAF;
+        nextHeader.freeSpaceOffset = SIZEOF_HEADER_LEAF + numBytesForSplitEntries;
         prevHeader.rightSibling = newPageNumber;
         prevHeader.numEntries = firstHalfEntries;
         prevHeader.freeSpaceOffset = splitPoint;
@@ -529,13 +525,14 @@ RC IndexManager::splitPage(void *prevPage, void *newPage, int prevPageNumber, in
          */
         HeaderInterior prevHeader = getHeaderInterior(prevPage);
         HeaderInterior newHeader = getHeaderInterior(newPage);
-        int leftEntrySize = findKeySize(keyValue, attribute);
+        int leftEntrySize = findInteriorEntrySize(keyValue, attribute);
         memcpy(get<0>(newChildEntry), keyValue, leftEntrySize);
         get<1>(newChildEntry) = newPageNumber;
-        memcpy((char *)newPage + SIZEOF_HEADER_INTERIOR, (char *)prevPage + splitPoint + leftEntrySize, prevHeader.freeSpaceOffset - splitPoint + leftEntrySize);
-        memset((char *)prevPage, 0, prevHeader.freeSpaceOffset - splitPoint);
+        int numBytesForSplitEntries = prevHeader.freeSpaceOffset - (splitPoint + leftEntrySize);
+        memcpy((char *)newPage + SIZEOF_HEADER_INTERIOR, (char *)prevPage + splitPoint + leftEntrySize, numBytesForSplitEntries);
+        memset((char *)prevPage + splitPoint, 0, prevHeader.freeSpaceOffset - splitPoint);
         newHeader.numEntries = prevHeader.numEntries - firstHalfEntries;
-        newHeader.freeSpaceOffset = (prevHeader.freeSpaceOffset - splitPoint - leftEntrySize) + SIZEOF_HEADER_INTERIOR;
+        newHeader.freeSpaceOffset = SIZEOF_HEADER_INTERIOR + numBytesForSplitEntries;
         prevHeader.numEntries = firstHalfEntries;
         prevHeader.freeSpaceOffset = splitPoint;
         setHeaderInterior(prevPage, prevHeader);
@@ -625,6 +622,9 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
     if (!isLeafPage(pageData))
     {
         int pagePointer = findTrafficCop(key, attribute, pageData);
+        if (pagePointer < 0)
+            return -1;
+
         insertToTree(ixfileHandle, attribute, key, rid, pagePointer, newChild);
         if (get<0>(newChild) == nullptr)
         {
@@ -689,13 +689,13 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
         }
 
         get<0>(newChild) = malloc(PAGE_SIZE);
-        rc = insertEntryInPage(pageData, key, rid, attribute, true);
+        rc = insertEntryInPage(pageData, key, rid, attribute, true); // This updated our numEntries and freeSpaceOffset.
         if (rc != SUCCESS)
             return rc;
 
         //page is now overfull
         PageNum newPageNumber = 0;
-        void *newPage = malloc(PAGE_SIZE);
+        void *newPage = calloc(PAGE_SIZE, sizeof(uint8_t));
 
         createEmptyPage(ixfileHandle, newPage, true, newPageNumber);
         splitPage(pageData, newPage, nodePointer, newPageNumber, attribute, newChild, true);
@@ -897,7 +897,7 @@ RC IndexManager::scan(IXFileHandle &ixfileHandle,
     // Recursively on corresponding child.
     int childPage = findTrafficCop(lowKey, attribute, pageData);
     free(pageData);
-    if (childPage == -1)
+    if (childPage < 0)
         return -1;
     return scan(ixfileHandle, attribute, lowKey, highKey, lowKeyInclusive, highKeyInclusive, ix_ScanIterator);
 }
