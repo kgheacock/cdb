@@ -60,11 +60,11 @@ public:
 
     static tuple<void *, int> getKeyDataWithSize(const Attribute attribute, const void *key);
 
-    static HeaderInterior getHeaderInterior(const void *pageData);
-    static void setHeaderInterior(void *pageData, HeaderInterior header);
+    static RC getHeaderInterior(const void *pageData, HeaderInterior &header);
+    static void setHeaderInterior(void *pageData, const HeaderInterior header);
 
-    static HeaderLeaf getHeaderLeaf(const void *pageData);
-    static void setHeaderLeaf(void *pageData, HeaderLeaf header);
+    static RC getHeaderLeaf(const void *pageData, HeaderLeaf &header);
+    static void setHeaderLeaf(void *pageData, const HeaderLeaf header);
 
 
     // Create an index file.
@@ -159,24 +159,24 @@ private:
 
     //Pre: page is a pointer to a page data of any type
     //Post: the offset of the page’s free space is returned
-    static int findFreeSpaceOffset(const void *page);
+    static RC findFreeSpaceOffset(const void *page, size_t &freeSpaceOffset);
 
     //Pre: val contains a valid entry to be inserted either to a Leaf or Non-Leaf page and attr corresponding to that entry.
     //     &Page is a pointer to a FileHandle of a page
     //Post: returns whether or not the given val will fit on the given page.
-    static bool willEntryFit(const void *pageData, const void *val, const Attribute attr, bool isLeafValue);
+    static RC willEntryFit(const void *pageData, const void *val, const Attribute attr, bool isLeafValue, bool &willFit);
 
     //Pre: val contains a valid entry to be inserted and attr coresponding to that entry. pageData is a
     //      page that contains traffic cops
     //Post: returns the page number of the next page to visit
-    int findTrafficCop(const void *val, const Attribute attr, const void *pageData);
+    RC findTrafficCop(const void *val, const Attribute attr, const void *pageData, int &trafficCop);
 
     //Pre: *page contains the page where *key will be written. attr corresponds to key and isLeafNode tells
     //      whether page is a leaf page
     //Post: *page will be searched and key (which is in the correct format) will be placed in the correct position
     RC insertEntryInPage(void *page, const void *key, const RID &rid, const Attribute &attr, bool isLeafNodeconst, int rightChild = -1);
 
-    void updateRoot(IXFileHandle &IXFileHandle, tuple<void *, int> newChild, int leftChild, const Attribute &attr);
+    RC updateRoot(IXFileHandle &IXFileHandle, tuple<void *, int> newChild, int leftChild, const Attribute &attr);
 
     RC splitPage(void *prevPage, void *newPage, int prevPageNumber, int newPageNumber, const Attribute &attribute, tuple<void *, int> &newChildEntry, bool isLeafPage);
 
