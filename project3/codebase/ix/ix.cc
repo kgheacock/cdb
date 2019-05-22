@@ -290,7 +290,7 @@ void IndexManager::setHeaderLeaf(void *pageData, HeaderLeaf header)
     memcpy((char *)pageData + POSITION_SIBLING_PAGENUM_RIGHT, &(header.rightSibling), SIZEOF_SIBLING_PAGENUM);
 }
 
-void IndexManager::insertEntryInPage(void *page, const void *key, const RID &rid, const Attribute &attr, bool isLeafNodeconst, int rightChild /*= -1*/)
+RC IndexManager::insertEntryInPage(void *page, const void *key, const RID &rid, const Attribute &attr, bool isLeafNodeconst, int rightChild /*= -1*/)
 {
     //TODO: search the given page using IXFile_Iterator and find the correct position to insert either a Leaf entry
     //      or TrafficCop entry into *page. Check to make sure it will fit first. If the position is in middle, make sure
@@ -317,25 +317,25 @@ void IndexManager::insertEntryInPage(void *page, const void *key, const RID &rid
     uint32_t numberOfEntries = 0;
     void *entry = malloc(PAGE_SIZE);
     void *slotData = malloc(PAGE_SIZE);
+    tuple<void *, int> keyDataWithSize = getKeyDataWithSize(attr, key);
+    void *keyData = get<0>(keyDataWithSize);
     int previousOffset = isLeafNodeconst ? SIZEOF_HEADER_LEAF : SIZEOF_HEADER_INTERIOR + SIZEOF_CHILD_PAGENUM;
     //previous offset will contain the value of the offset that contains the greatest entry that is < than key
     while (getNextEntry(page, offset, numberOfEntries, entry, slotData, attr, isLeafNodeconst) != IX_EOF)
     {
-        int result = 0;
-        int varCharLength = 0;
-        switch (attr.type)
-        {
-        case TypeInt:
-        case TypeReal:
-            result = memcmp(entry, key, sizeof(uint32_t));
+        tuple<void *, int> entryDataWithSize = getKeyDataWithSize(attr, entry);
+        void *entryData = get<0>(entryDataWithSize);
+
+        bool entry_lt_key;
+        bool entry_eq_key;
+        bool entry_gt_key;
+        auto rc = compareKeyData(attr, entryData, keyData, entry_lt_key, entry_eq_key, entry_gt_key);
+        if (rc != SUCCESS)
+            return rc;
+
+        if (entry_eq_key || entry_gt_key)
             break;
-        case TypeVarChar:
-            memcpy(&varCharLength, key, sizeof(uint32_t));
-            result = memcmp(entry, key, sizeof(uint32_t) + varCharLength);
-            break;
-        }
-        if (result >= 0)
-            break;
+
         previousOffset = offset;
     }
     int freeSpaceOffset = findFreeSpaceOffset(page);
@@ -367,6 +367,7 @@ void IndexManager::insertEntryInPage(void *page, const void *key, const RID &rid
     free(partToMove);
     free(entry);
     free(slotData);
+    return SUCCESS;
 }
 
 int IndexManager::findLeafEntrySize(const void *val, const Attribute attr)
@@ -635,7 +636,10 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
             if (willEntryFit(pageData, get<0>(newChild), attribute, false))
             {
                 RID temp;
-                insertEntryInPage(pageData, get<0>(newChild), temp, attribute, false, get<1>(newChild));
+                rc = insertEntryInPage(pageData, get<0>(newChild), temp, attribute, false, get<1>(newChild));
+                if (rc != SUCCESS)
+                    return rc;
+
                 ixfileHandle.writePage(nodePointer, pageData);
                 free(pageData);
                 free(get<0>(newChild));
@@ -647,7 +651,10 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
                 PageNum newPageNumber = 0;
                 RID temp;
                 void *newPage = malloc(PAGE_SIZE);
-                insertEntryInPage(pageData, get<0>(newChild), temp, attribute, false, get<1>(newChild));
+                rc = insertEntryInPage(pageData, get<0>(newChild), temp, attribute, false, get<1>(newChild));
+                if (rc != SUCCESS)
+                    return rc;
+
                 //Page is now overfull so it must be split
                 createEmptyPage(ixfileHandle, newPage, false, newPageNumber);
                 splitPage(pageData, newPage, nodePointer, newPageNumber, attribute, newChild, false);
@@ -669,14 +676,23 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
     {
         if (willEntryFit(pageData, key, attribute, true))
         {
-            insertEntryInPage(pageData, key, rid, attribute, true);
-            ixfileHandle.writePage(nodePointer, pageData);
+            rc = insertEntryInPage(pageData, key, rid, attribute, true);
+            if (rc != SUCCESS)
+                return rc;
+
+            rc = ixfileHandle.writePage(nodePointer, pageData);
+            if (rc != SUCCESS)
+                return rc;
+
             free(pageData);
             return SUCCESS;
         }
 
         get<0>(newChild) = malloc(PAGE_SIZE);
-        insertEntryInPage(pageData, key, rid, attribute, true);
+        rc = insertEntryInPage(pageData, key, rid, attribute, true);
+        if (rc != SUCCESS)
+            return rc;
+
         //page is now overfull
         PageNum newPageNumber = 0;
         void *newPage = malloc(PAGE_SIZE);

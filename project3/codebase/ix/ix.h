@@ -174,7 +174,7 @@ private:
     //Pre: *page contains the page where *key will be written. attr corresponds to key and isLeafNode tells
     //      whether page is a leaf page
     //Post: *page will be searched and key (which is in the correct format) will be placed in the correct position
-    void insertEntryInPage(void *page, const void *key, const RID &rid, const Attribute &attr, bool isLeafNodeconst, int rightChild = -1);
+    RC insertEntryInPage(void *page, const void *key, const RID &rid, const Attribute &attr, bool isLeafNodeconst, int rightChild = -1);
 
     void updateRoot(IXFileHandle &IXFileHandle, tuple<void *, int> newChild, int leftChild, const Attribute &attr);
 
