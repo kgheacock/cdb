@@ -1128,10 +1128,10 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
                 return rc;
             }
         }
-        //free(get<0>(newChild));
+        free(get<0>(newChild));
         free(pageData);
         free(newPage);
-        //get<0>(newChild) = nullptr;
+        get<0>(newChild) = nullptr;
         return rc;
     }
 }
