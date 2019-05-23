@@ -29,6 +29,9 @@ const size_t POSITION_SIBLING_PAGENUM_RIGHT = POSITION_SIBLING_PAGENUM_LEFT + SI
 const int IX_EOF(-1); // end of the index scan
 const int IX_SI_CLOSED(-2);
 const int IX_FREE_SPACE_OFFSET_INVALID(-3);
+const int IX_NODE_NOT_CHILD_OF_PARENT(-4);
+const int IX_NO_SIBLINGS(-5);
+const int IX_CANT_REDISTRIBUTE(-6);
 
 // Headers for leaf nodes and internal nodes
 typedef struct
@@ -44,6 +47,12 @@ typedef struct
     int leftSibling;
     int rightSibling;
 } HeaderLeaf;
+
+union Header
+{
+    HeaderLeaf leaf;
+    HeaderInterior interior;
+};
 
 class IX_ScanIterator;
 class IXFileHandle;
@@ -89,21 +98,21 @@ public:
                            const Attribute attribute,
                            const void *keyToDelete,
                            const RID &ridToDelete,
-                           const void *oldChildKey,
+                           void * &oldChildEntry,
                            const int parentNodePageNum,
                            const int currentNodePageNum);
     RC deleteEntry_leaf(IXFileHandle &ixfileHandle,
                         const Attribute attribute,
                         const void *keyToDelete,
                         const RID &ridToDelete,
-                        const void *oldChildKey,
+                        void * &oldChildEntry,
                         const int parentNodePageNum,
                         const int currentNodePageNum);
     RC deleteEntry_interior(IXFileHandle &ixfileHandle,
                             const Attribute attribute,
                             const void *keyToDelete,
                             const RID &ridToDelete,
-                            const void *oldChildKey,
+                            void * &oldChildEntry,
                             const int parentNodePageNum,
                             const int currentNodePageNum);
 
@@ -134,13 +143,15 @@ public:
     //Post: the truth value of whether the page parameter is a leaf
     static bool isLeafPage(const void *page);
 
-    static RC isNodeUnderfull(const void *nodePageData, bool &isUnderfull);
+    static RC willNodeBeUnderfull(const void *nodePageData, size_t entrySize, bool &willBeUnderfull, size_t &spaceUntilNotUnderfull);
 
     static int findIndexOfKeyWithRID(const Attribute attribute,
                                      const vector<tuple<void *, int>> keysWithSizes,
                                      const vector<RID> rids,
                                      const void *targetKey,
                                      const RID targetRID);
+
+    static RC canRedistributeEntries(int srcNodePageNum, int dstNodePageNum, size_t dstSpaceNeeded);
 
 protected:
     IndexManager();
@@ -197,6 +208,7 @@ private:
     bool areRIDsEqual(const RID &rid1, const RID &rid2);
     RC getRootPageNumber(const string indexFileName);
     RC updateRootPageNumber(const string indexFileName, const PageNum newRoot);
+    RC getClosestSiblings(const Attribute attribute, const void *parentPageData, vector<tuple<int, int>> &siblings_PageNumWithIndex, const int myNodePageNum, int &myIndex);
 };
 
 class IXFileHandle
