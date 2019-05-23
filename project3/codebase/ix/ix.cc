@@ -564,28 +564,19 @@ RC IndexManager::insertEntryInPage(void *page, const void *key, const RID &rid, 
         free(entryToInsert);
         return -1;
     }
-    freeSpaceOffset += entrySize;
 
     //Move everything from: previousOffset to freeSpaceOffset to: previousOffset + entrySize
     size_t partToMoveSize = freeSpaceOffset - previousOffset;
-    void *partToMove = calloc(partToMoveSize, 1);
-    if (partToMove == nullptr)
+    if (partToMoveSize > 0)
     {
-        free(entryToInsert);
-        return -1;
+        memmove((char *)page + previousOffset + entrySize, (char *)page + previousOffset, partToMoveSize);
     }
-
-    //Copy data that should be after our inserted entry.
-    memcpy(partToMove, (char *)page + previousOffset, partToMoveSize);
-
     //Copy new entry to page
     memcpy((char *)page + previousOffset, entryToInsert, entrySize);
 
-    //Recopy the previously saved part
-    memcpy((char *)page + previousOffset + entrySize, partToMove, partToMoveSize);
-
-    free(partToMove);
     free(entryToInsert);
+
+    freeSpaceOffset += entrySize;
 
     if (isLeafNodeconst)
     {
@@ -978,6 +969,7 @@ RC IndexManager::getNextEntry(void *page, uint32_t &currentOffset, uint32_t &ent
     entryCount++;
     return SUCCESS;
 }
+
 RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, const RID &rid, int nodePointer, tuple<void *, int> &newChild)
 {
     void *pageData = malloc(PAGE_SIZE * 2);
@@ -1620,6 +1612,7 @@ void IndexManager::printLeaf(IXFileHandle &ixfileHandle, const Attribute &attrib
                 break;
             }
             cout << ":["; // Open key's values.
+            prevKeyData = calloc(PAGE_SIZE, sizeof(uint8_t));
         }
         else
         {
@@ -1653,7 +1646,7 @@ void IndexManager::printLeaf(IXFileHandle &ixfileHandle, const Attribute &attrib
 
         cout << '(' << currRID.pageNum << ',' << currRID.slotNum << ')'; // Output RID for current key.
 
-        prevKeyData = currKeyData;
+        memcpy(prevKeyData, currKeyData, currKeySize);
         prevKeySize = currKeySize;
         free(currKeyData);
     }
@@ -1663,6 +1656,7 @@ void IndexManager::printLeaf(IXFileHandle &ixfileHandle, const Attribute &attrib
     if (prevKeyData != nullptr)
     {
         cout << "]\""; // Close last key.
+        free(prevKeyData);
     }
 
     cout << "]"; // Close "keys" field.
