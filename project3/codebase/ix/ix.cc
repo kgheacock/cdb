@@ -367,8 +367,26 @@ RC IndexManager::getHeaderInterior(const void *pageData, HeaderInterior &header)
     memcpy(&(header.numEntries), (char *)pageData + POSITION_NUM_ENTRIES, SIZEOF_NUM_ENTRIES);
     memcpy(&(header.freeSpaceOffset), (char *)pageData + POSITION_FREE_SPACE_OFFSET, SIZEOF_FREE_SPACE_OFFSET);
     if (header.numEntries > PAGE_SIZE - SIZEOF_HEADER_INTERIOR || header.freeSpaceOffset > PAGE_SIZE)
-        return -1;
+        return IX_FREE_SPACE_OFFSET_INVALID;
     return SUCCESS;
+}
+
+HeaderInterior getHeaderInterior_debug(const void *pageData)
+{
+    HeaderInterior header;
+    memcpy(&(header.numEntries), (char *)pageData + POSITION_NUM_ENTRIES, SIZEOF_NUM_ENTRIES);
+    memcpy(&(header.freeSpaceOffset), (char *)pageData + POSITION_FREE_SPACE_OFFSET, SIZEOF_FREE_SPACE_OFFSET);
+    return header;
+}
+
+HeaderLeaf getHeaderLeaf_debug(const void *pageData)
+{
+    HeaderLeaf header;
+    memcpy(&(header.numEntries), (char *)pageData + POSITION_NUM_ENTRIES, SIZEOF_NUM_ENTRIES);
+    memcpy(&(header.freeSpaceOffset), (char *)pageData + POSITION_FREE_SPACE_OFFSET, SIZEOF_FREE_SPACE_OFFSET);
+    memcpy(&(header.leftSibling), (char *)pageData + POSITION_SIBLING_PAGENUM_LEFT, SIZEOF_SIBLING_PAGENUM);
+    memcpy(&(header.rightSibling), (char *)pageData + POSITION_SIBLING_PAGENUM_RIGHT, SIZEOF_SIBLING_PAGENUM);
+    return header;
 }
 
 void IndexManager::setHeaderInterior(void *pageData, const HeaderInterior header)
@@ -384,7 +402,7 @@ RC IndexManager::getHeaderLeaf(const void *pageData, HeaderLeaf &header)
     memcpy(&(header.leftSibling), (char *)pageData + POSITION_SIBLING_PAGENUM_LEFT, SIZEOF_SIBLING_PAGENUM);
     memcpy(&(header.rightSibling), (char *)pageData + POSITION_SIBLING_PAGENUM_RIGHT, SIZEOF_SIBLING_PAGENUM);
     if (header.numEntries > PAGE_SIZE - SIZEOF_HEADER_LEAF || header.freeSpaceOffset > PAGE_SIZE)
-        return -1;
+        return IX_FREE_SPACE_OFFSET_INVALID;
     return SUCCESS;
 }
 
@@ -784,8 +802,23 @@ RC IndexManager::splitPage(void *prevPage, void *newPage, int prevPageNumber, in
         rc = getHeaderLeaf(prevPage, prevHeader);
         if (rc != SUCCESS)
         {
-            free(keyValue);
-            return rc;
+            if (rc == IX_FREE_SPACE_OFFSET_INVALID)
+            {
+                // Check if we were overfull before the insert (i.e. if insert caused overfull, ignore it)
+                int entrySize = findLeafEntrySize(keyValue, attribute);
+                size_t fsoBeforeOverfull = prevHeader.freeSpaceOffset - entrySize;
+                bool corruptedBeforeInsert = fsoBeforeOverfull > PAGE_SIZE;
+                if (corruptedBeforeInsert)
+                {
+                    free(keyValue);
+                    return rc;
+                }
+            }
+            else
+            {
+                free(keyValue);
+                return rc;
+            }
         }
 
         HeaderLeaf nextHeader;
@@ -820,8 +853,23 @@ RC IndexManager::splitPage(void *prevPage, void *newPage, int prevPageNumber, in
         rc = getHeaderInterior(prevPage, prevHeader);
         if (rc != SUCCESS)
         {
-            free(keyValue);
-            return rc;
+            if (rc == IX_FREE_SPACE_OFFSET_INVALID)
+            {
+                // Check if we were overfull before the insert (i.e. if insert caused overfull, ignore it)
+                int entrySize = findInteriorEntrySize(keyValue, attribute);
+                size_t fsoBeforeOverfull = prevHeader.freeSpaceOffset - entrySize;
+                bool corruptedBeforeInsert = fsoBeforeOverfull > PAGE_SIZE;
+                if (corruptedBeforeInsert)
+                {
+                    free(keyValue);
+                    return rc;
+                }
+            }
+            else
+            {
+                free(keyValue);
+                return rc;
+            }
         }
 
         HeaderInterior newHeader;
@@ -856,10 +904,12 @@ RC IndexManager::splitPage(void *prevPage, void *newPage, int prevPageNumber, in
     free(keyValue);
     return SUCCESS;
 }
+
 bool IndexManager::isRoot(PageNum pageNumber)
 {
     return pageNumber == rootPage;
 }
+
 //NOTE:: fieldValue and slotData must be of size PAGE_SIZE so they can be zero-ed each time. bad design. my bad.
 RC IndexManager::getNextEntry(void *page, uint32_t &currentOffset, uint32_t &entryCount, void *fieldValue, void *slotData, const Attribute attr, bool isLeafPage)
 {
@@ -935,6 +985,17 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
     {
         free(pageData);
         return rc;
+    }
+
+    HeaderLeaf headerLeaf;
+    HeaderInterior headerInterior;
+    if (isLeafPage(pageData))
+    {
+        getHeaderLeaf(pageData, headerLeaf);
+    }
+    else
+    {
+        getHeaderInterior(pageData, headerInterior);
     }
 
     if (!isLeafPage(pageData))
@@ -1065,7 +1126,7 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
             return rc;
         }
 
-        get<0>(newChild) = malloc(PAGE_SIZE);
+        get<0>(newChild) = calloc(PAGE_SIZE, sizeof(uint8_t));
         if (get<0>(newChild) == nullptr)
         {
             free(pageData);
@@ -1094,7 +1155,15 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
             return rc;
         }
 
-        splitPage(pageData, newPage, nodePointer, newPageNumber, attribute, newChild, true);
+        rc = splitPage(pageData, newPage, nodePointer, newPageNumber, attribute, newChild, true);
+        if (rc != SUCCESS)
+        {
+            free(get<0>(newChild));
+            free(pageData);
+            free(newPage);
+            get<0>(newChild) = nullptr;
+            return rc;
+        }
 
         rc = ixfileHandle.writePage(nodePointer, pageData);
         if (rc != SUCCESS)

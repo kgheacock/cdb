@@ -28,6 +28,7 @@ const size_t POSITION_SIBLING_PAGENUM_RIGHT = POSITION_SIBLING_PAGENUM_LEFT + SI
 
 const int IX_EOF(-1); // end of the index scan
 const int IX_SI_CLOSED(-2);
+const int IX_FREE_SPACE_OFFSET_INVALID(-3);
 
 // Headers for leaf nodes and internal nodes
 typedef struct
