@@ -115,6 +115,14 @@ public:
             bool lowKeyInclusive,
             bool highKeyInclusive,
             IX_ScanIterator &ix_ScanIterator);
+    RC scan_by_pageNumber(IXFileHandle &ixfileHandle,
+            const Attribute &attribute,
+            const void *lowKey,
+            const void *highKey,
+            bool lowKeyInclusive,
+            bool highKeyInclusive,
+            IX_ScanIterator &ix_ScanIterator,
+            PageNum pageNumber);
 
     // Print the B+ tree in pre-order (in a JSON record format)
     void printBtree(IXFileHandle &ixfileHandle, const Attribute &attribute) const;

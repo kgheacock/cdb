@@ -233,8 +233,6 @@ RC IndexManager::findTrafficCop(const void *val, const Attribute attr, const voi
 {
     tuple<void *, int> targetTrafficCopWithSize = getKeyDataWithSize(attr, val);
     void *targetTrafficCop = get<0>(targetTrafficCopWithSize);
-    if (targetTrafficCop == nullptr)
-        return -1;
 
     vector<tuple<void *, int>> keysWithSizes = getKeysWithSizes_interior(attr, pageData);
     if (keysWithSizes.empty())
@@ -249,6 +247,12 @@ RC IndexManager::findTrafficCop(const void *val, const Attribute attr, const voi
         free(targetTrafficCop);
         freeKeysWithSizes(keysWithSizes);
         return -1;
+    }
+
+    if (val == nullptr)
+    {
+        trafficCop = children.front();
+        return SUCCESS;
     }
 
     for (auto it = children.begin(); it + 1 != children.end(); ++it)
@@ -1431,8 +1435,20 @@ RC IndexManager::scan(IXFileHandle &ixfileHandle,
                       bool highKeyInclusive,
                       IX_ScanIterator &ix_ScanIterator)
 {
+    return scan_by_pageNumber(ixfileHandle, attribute, lowKey, highKey, lowKeyInclusive, highKeyInclusive, ix_ScanIterator, rootPage);
+}
+
+RC IndexManager::scan_by_pageNumber(IXFileHandle &ixfileHandle,
+                      const Attribute &attribute,
+                      const void *lowKey,
+                      const void *highKey,
+                      bool lowKeyInclusive,
+                      bool highKeyInclusive,
+                      IX_ScanIterator &ix_ScanIterator,
+                      PageNum pageNumber)
+{
     void *pageData = malloc(PAGE_SIZE);
-    auto rc = ixfileHandle.readPage(rootPage, pageData);
+    auto rc = ixfileHandle.readPage(pageNumber, pageData);
     if (rc != SUCCESS)
     {
         free(pageData);
@@ -1460,7 +1476,7 @@ RC IndexManager::scan(IXFileHandle &ixfileHandle,
 
     if (childPage < 0)
         return -1;
-    return scan(ixfileHandle, attribute, lowKey, highKey, lowKeyInclusive, highKeyInclusive, ix_ScanIterator);
+    return scan_by_pageNumber(ixfileHandle, attribute, lowKey, highKey, lowKeyInclusive, highKeyInclusive, ix_ScanIterator, childPage);
 }
 
 vector<tuple<void *, int>> IndexManager::getDataEntriesWithSizes_leaf(const Attribute attribute, const void *pageData)
