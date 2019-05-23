@@ -566,8 +566,13 @@ RC IndexManager::insertEntryInPage(void *page, const void *key, const RID &rid, 
     }
 
     //Move everything from: previousOffset to freeSpaceOffset to: previousOffset + entrySize
-    size_t partToMoveSize = freeSpaceOffset - previousOffset;
-    if (partToMoveSize > 0)
+    int partToMoveSize = freeSpaceOffset - previousOffset;
+    if (partToMoveSize < 0)
+    {
+        free(entryToInsert);
+        return -1;
+    }
+    else if (partToMoveSize > 0)
     {
         memmove((char *)page + previousOffset + entrySize, (char *)page + previousOffset, partToMoveSize);
     }
@@ -884,11 +889,11 @@ RC IndexManager::splitPage(void *prevPage, void *newPage, int prevPageNumber, in
 
         memcpy(get<0>(newChildEntry), keyValue, leftEntrySize);
         get<1>(newChildEntry) = newPageNumber;
-        int numBytesForSplitEntries = prevHeader.freeSpaceOffset - (splitPoint + leftEntrySize);
-        memcpy((char *)newPage + SIZEOF_HEADER_INTERIOR, (char *)prevPage + splitPoint + leftEntrySize, numBytesForSplitEntries);
+        int numBytesForSplitEntries = prevHeader.freeSpaceOffset - ((splitPoint + leftEntrySize) - SIZEOF_CHILD_PAGENUM);
+        memcpy((char *)newPage + SIZEOF_HEADER_INTERIOR, (char *)prevPage + ((splitPoint + leftEntrySize) - SIZEOF_CHILD_PAGENUM), numBytesForSplitEntries);
         memset((char *)prevPage + splitPoint, 0, prevHeader.freeSpaceOffset - splitPoint);
 
-        newHeader.numEntries = prevHeader.numEntries - firstHalfEntries;
+        newHeader.numEntries = (prevHeader.numEntries - firstHalfEntries) - 1;
         newHeader.freeSpaceOffset = SIZEOF_HEADER_INTERIOR + numBytesForSplitEntries;
         setHeaderInterior(newPage, newHeader);
 
@@ -1094,8 +1099,6 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
                 }
                 free(pageData);
                 free(newPage);
-                //free(get<0>(newChild));
-                //get<0>(newChild) = nullptr;
                 return SUCCESS;
             }
         }
@@ -1195,10 +1198,9 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
                 return rc;
             }
         }
-        //free(get<0>(newChild));
+
         free(pageData);
         free(newPage);
-        //get<0>(newChild) = nullptr;
         return rc;
     }
 }
