@@ -360,7 +360,7 @@ vector<int> IndexManager::getChildPointers_interior(const Attribute attribute, c
 
         memcpy(&child, (char *)pageData + offset, SIZEOF_CHILD_PAGENUM);
         children.push_back(child);
-        offset += entrySize;
+        offset += SIZEOF_CHILD_PAGENUM;
     }
 
     return children;
@@ -1047,6 +1047,13 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
             }
             else
             {
+                RID temp;
+
+                rc = insertEntryInPage(pageData, get<0>(newChild), temp, attribute, false, get<1>(newChild));
+                if (rc != SUCCESS)
+                    return rc;
+
+                //Page is now overfull so it must be split
                 void *newPage = malloc(PAGE_SIZE);
                 if (newPage == nullptr)
                 {
@@ -1056,15 +1063,7 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
                     get<0>(newChild) = nullptr;
                     return -1;
                 }
-
-                RID temp;
                 PageNum newPageNumber = 0;
-
-                rc = insertEntryInPage(pageData, get<0>(newChild), temp, attribute, false, get<1>(newChild));
-                if (rc != SUCCESS)
-                    return rc;
-
-                //Page is now overfull so it must be split
                 rc = createEmptyPage(ixfileHandle, newPage, false, newPageNumber);
                 if (rc != SUCCESS)
                 {
@@ -1095,8 +1094,8 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
                 }
                 free(pageData);
                 free(newPage);
-                free(get<0>(newChild));
-                get<0>(newChild) = nullptr;
+                //free(get<0>(newChild));
+                //get<0>(newChild) = nullptr;
                 return SUCCESS;
             }
         }
@@ -1119,6 +1118,9 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
 
             rc = ixfileHandle.writePage(nodePointer, pageData);
             free(pageData);
+            if (get<0>(newChild) != nullptr)
+                free(get<0>(newChild));
+            get<0>(newChild) = nullptr;
             return rc;
         }
 
@@ -1193,10 +1195,10 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
                 return rc;
             }
         }
-        free(get<0>(newChild));
+        //free(get<0>(newChild));
         free(pageData);
         free(newPage);
-        get<0>(newChild) = nullptr;
+        //get<0>(newChild) = nullptr;
         return rc;
     }
 }
@@ -1550,7 +1552,7 @@ void IndexManager::printBtree(IXFileHandle &ixfileHandle, const Attribute &attri
          << '}' << endl;
 }
 
-void IndexManager::printBtree(IXFileHandle &ixfileHandle, const Attribute &attribute, uint32_t depth, PageNum pageNumber) const
+void IndexManager::printBtree(IXFileHandle &ixfileHandle, const Attribute &attribute, uint32_t depth, PageNum pageNumber)
 {
     void *pageData = calloc(PAGE_SIZE, 1);
     ixfileHandle.readPage(pageNumber, pageData);
@@ -1567,7 +1569,7 @@ void IndexManager::printBtree(IXFileHandle &ixfileHandle, const Attribute &attri
     free(pageData);
 }
 
-void IndexManager::printLeaf(IXFileHandle &ixfileHandle, const Attribute &attribute, uint32_t depth, const void *pageData) const
+void IndexManager::printLeaf(IXFileHandle &ixfileHandle, const Attribute &attribute, uint32_t depth, const void *pageData)
 {
     string indent(depth * 4, ' ');
     cout << indent;
@@ -1667,7 +1669,7 @@ void IndexManager::printLeaf(IXFileHandle &ixfileHandle, const Attribute &attrib
     }
 }
 
-void IndexManager::printInterior(IXFileHandle &ixfileHandle, const Attribute &attribute, uint32_t depth, const void *pageData) const
+void IndexManager::printInterior(IXFileHandle &ixfileHandle, const Attribute &attribute, uint32_t depth, const void *pageData)
 {
     string indent(depth * 4, ' ');
     cout << indent;

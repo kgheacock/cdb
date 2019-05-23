@@ -126,9 +126,9 @@ public:
 
     // Print the B+ tree in pre-order (in a JSON record format)
     void printBtree(IXFileHandle &ixfileHandle, const Attribute &attribute) const;
-    void printBtree(IXFileHandle &ixfileHandle, const Attribute &attribute, uint32_t depth, PageNum pageNumber) const;
-    void printLeaf(IXFileHandle &ixfileHandle, const Attribute &attribute, uint32_t depth, const void *pageData) const;
-    void printInterior(IXFileHandle &ixfileHandle, const Attribute &attribute, uint32_t depth, const void *pageData) const;
+    static void printBtree(IXFileHandle &ixfileHandle, const Attribute &attribute, uint32_t depth, PageNum pageNumber);
+    static void printLeaf(IXFileHandle &ixfileHandle, const Attribute &attribute, uint32_t depth, const void *pageData);
+    static void printInterior(IXFileHandle &ixfileHandle, const Attribute &attribute, uint32_t depth, const void *pageData);
 
     //Pre: page is a pointer to page data of any type
     //Post: the truth value of whether the page parameter is a leaf
