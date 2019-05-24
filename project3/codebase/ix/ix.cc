@@ -1396,7 +1396,7 @@ RC IndexManager::deleteEntry_leaf(IXFileHandle &ixfileHandle,
             return rc;
         }
 
-        tuple<int, int> sibling_PageNumWithIndex = getClosestSiblings.front();
+        tuple<int, int> sibling_PageNumWithIndex = siblings_PageNumWithIndex.front();
         
     }
     free(currentNodePageData);
@@ -1832,7 +1832,7 @@ RC IndexManager::getClosestSiblings(const Attribute attribute, const void *paren
     {
         const int child = *it;
         const int i = distance(children.begin(), it);
-        if (child == nodePageNum)
+        if (child == myNodePageNum)
             myIndex = i;
     }
     if (myIndex < 0)
@@ -1841,59 +1841,27 @@ RC IndexManager::getClosestSiblings(const Attribute attribute, const void *paren
     auto leftSiblingIndex = myIndex - 1;
     if (leftSiblingIndex >= 0)
     {
-        siblings.push_back(make_tuple(children[leftSiblingIndex], leftSiblingIndex));
+        siblings_PageNumWithIndex.push_back(make_tuple(children[leftSiblingIndex], leftSiblingIndex));
     }
 
     auto rightSiblingIndex = myIndex + 1;
-    if (rightSiblingIndex < children.size())
-        siblings.push_back(make_tuple(children[rightSiblingIndex], rightSiblingIndex);
+    if (rightSiblingIndex < (int) children.size())
+        siblings_PageNumWithIndex.push_back(make_tuple(children[rightSiblingIndex], rightSiblingIndex));
 
-    if (siblings.size() == 0)
+    if (siblings_PageNumWithIndex.size() == 0)
         return IX_NO_SIBLINGS;
 
     return SUCCESS;
 }
 
-RC IndexManager::redistributeEntries(IXFileHandle &ixfileHandle, void *parentNodePageData, void *srcNodePageData, void *dstNodePageData, int srcNodeIndex, int dstNodeIndex, size_t dstSpaceNeeded)
+RC IndexManager::redistributeEntries(IXFileHandle &ixfileHandle, const Attribute attribute, void *parentNodePageData, void *srcNodePageData, void * &srcNodePageData_copy, void *dstNodePageData, void * &dstNodePageData_copy, int srcNodeIndex, int dstNodeIndex, size_t dstSpaceNeeded)
 {
-    RC rc;
-
-    Header srcHeader;
-    if (isLeafPage(srcNodePageData))
-    {
-        rc = getHeaderLeaf(srcNodePageData, srcHeader.leaf);
-        if (rc != SUCCESS)
-            return rc;
-    }
-    else
-    {
-        rc = getHeaderInterior(srcNodePageData, srcHeader.interior);
-        if (rc != SUCCESS)
-            return rc;
-    }
-
-    Header dstHeader;
-    if (isLeafPage(dstNodePageData))
-    {
-        rc = getHeaderLeaf(dstNodePageData, dstHeader.leaf);
-        if (rc != SUCCESS)
-            return rc;
-    }
-    else
-    {
-        rc = getHeaderInterior(dstNodePageData, dstHeader.interior);
-        if (rc != SUCCESS)
-            return rc;
-    }
-
-    // Create copies so there aren't side effects on input pages if redistribution fails.
-
-    void srcNodePageData_copy = calloc(PAGE_SIZE, sizeof(uint8_t));
+    // Create copies of pages so there aren't side effects on input pages if redistribution fails.
+    srcNodePageData_copy = calloc(PAGE_SIZE, sizeof(uint8_t));
     if (srcNodePageData_copy == nullptr)
         return -1;
     memcpy(srcNodePageData_copy, srcNodePageData, PAGE_SIZE);
-
-    void dstNodePageData_copy = calloc(PAGE_SIZE, sizeof(uint8_t));
+    dstNodePageData_copy = calloc(PAGE_SIZE, sizeof(uint8_t));
     if (dstNodePageData_copy == nullptr)
     {
         free(srcNodePageData_copy);
@@ -1901,21 +1869,278 @@ RC IndexManager::redistributeEntries(IXFileHandle &ixfileHandle, void *parentNod
     }
     memcpy(dstNodePageData_copy, dstNodePageData, PAGE_SIZE);
     
+    RC rc;
+
+    HeaderLeaf srcHeaderLeaf;
+    HeaderInterior srcHeaderInterior;
+    bool srcIsLeaf = isLeafPage(srcNodePageData);
+    auto srcHeaderSize = srcIsLeaf ? SIZEOF_HEADER_LEAF : SIZEOF_HEADER_INTERIOR;
+    vector<tuple<void *, int>> srcDataEntriesWithSizes;
+    vector<tuple<void *, int>> srcKeysWithSizes;
+    vector<int> srcChildren;
+    vector<RID> srcRIDs;
+    if (srcIsLeaf)
+    {
+        rc = getHeaderLeaf(srcNodePageData, srcHeaderLeaf);
+        if (rc != SUCCESS)
+        {
+            free(srcNodePageData_copy);
+            free(dstNodePageData_copy);
+            return rc;
+        }
+
+        srcDataEntriesWithSizes = getDataEntriesWithSizes_leaf(attribute, srcNodePageData_copy);
+        if (srcDataEntriesWithSizes.empty())
+        {
+            free(srcNodePageData_copy);
+            free(dstNodePageData_copy);
+            return -1;
+        }
+        srcKeysWithSizes = getKeysWithSizes_leaf(attribute, srcDataEntriesWithSizes);
+        if (srcKeysWithSizes.size() != srcDataEntriesWithSizes.size())
+        {
+            free(srcNodePageData_copy);
+            free(dstNodePageData_copy);
+            freeDataEntriesWithSizes(srcDataEntriesWithSizes);
+            return -1;
+        }
+        srcRIDs = getRIDs_leaf(attribute, srcDataEntriesWithSizes);
+        if (srcRIDs.size() != srcKeysWithSizes.size())
+        {
+            free(srcNodePageData_copy);
+            free(dstNodePageData_copy);
+            freeDataEntriesWithSizes(srcDataEntriesWithSizes);
+            freeKeysWithSizes(srcKeysWithSizes);
+            return -1;
+        }
+    }
+    else
+    {
+        rc = getHeaderInterior(srcNodePageData, srcHeaderInterior);
+        if (rc != SUCCESS)
+        {
+            free(srcNodePageData_copy);
+            free(dstNodePageData_copy);
+            return rc;
+        }
+
+        srcKeysWithSizes = getKeysWithSizes_interior(attribute, srcNodePageData_copy);
+        if (srcKeysWithSizes.empty())
+        {
+            free(srcNodePageData_copy);
+            free(dstNodePageData_copy);
+            return -1;
+        }
+
+        srcChildren = getChildPointers_interior(attribute, srcNodePageData_copy);
+        if (srcChildren.size() != srcKeysWithSizes.size())
+        {
+            free(srcNodePageData_copy);
+            free(dstNodePageData_copy);
+            freeKeysWithSizes(srcKeysWithSizes);
+            return -1;
+        }
+    }
+
+    HeaderLeaf dstHeaderLeaf;
+    HeaderInterior dstHeaderInterior;
+    bool dstIsLeaf = isLeafPage(dstNodePageData);
+    auto dstHeaderSize = dstIsLeaf ? SIZEOF_HEADER_LEAF : SIZEOF_HEADER_INTERIOR;
+    vector<tuple<void *, int>> dstDataEntriesWithSizes;
+    vector<tuple<void *, int>> dstKeysWithSizes;
+    vector<int> dstChildren;
+    vector<RID> dstRIDs;
+    if (dstIsLeaf)
+    {
+        rc = getHeaderLeaf(dstNodePageData, dstHeaderLeaf);
+        if (rc != SUCCESS)
+        {
+            free(dstNodePageData_copy);
+            free(dstNodePageData_copy);
+            return rc;
+        }
+
+        dstDataEntriesWithSizes = getDataEntriesWithSizes_leaf(attribute, dstNodePageData_copy);
+        if (dstDataEntriesWithSizes.empty())
+        {
+            free(dstNodePageData_copy);
+            free(dstNodePageData_copy);
+            return -1;
+        }
+        dstKeysWithSizes = getKeysWithSizes_leaf(attribute, dstDataEntriesWithSizes);
+        if (dstKeysWithSizes.size() != dstDataEntriesWithSizes.size())
+        {
+            free(dstNodePageData_copy);
+            free(dstNodePageData_copy);
+            freeDataEntriesWithSizes(dstDataEntriesWithSizes);
+            return -1;
+        }
+        dstRIDs = getRIDs_leaf(attribute, dstDataEntriesWithSizes);
+        if (dstRIDs.size() != dstKeysWithSizes.size())
+        {
+            free(dstNodePageData_copy);
+            free(dstNodePageData_copy);
+            freeDataEntriesWithSizes(dstDataEntriesWithSizes);
+            freeKeysWithSizes(dstKeysWithSizes);
+            return -1;
+        }
+    }
+    else
+    {
+        rc = getHeaderInterior(dstNodePageData, dstHeaderInterior);
+        if (rc != SUCCESS)
+        {
+            free(dstNodePageData_copy);
+            free(dstNodePageData_copy);
+            return rc;
+        }
+
+        dstKeysWithSizes = getKeysWithSizes_interior(attribute, dstNodePageData_copy);
+        if (dstKeysWithSizes.empty())
+        {
+            free(dstNodePageData_copy);
+            free(dstNodePageData_copy);
+            return -1;
+        }
+
+        dstChildren = getChildPointers_interior(attribute, dstNodePageData_copy);
+        if (dstChildren.size() != dstKeysWithSizes.size())
+        {
+            free(dstNodePageData_copy);
+            free(dstNodePageData_copy);
+            freeKeysWithSizes(dstKeysWithSizes);
+            return -1;
+        }
+    }
+
+    if (srcIsLeaf != dstIsLeaf)
+        return -1; // Can't redistribute between leaf and interior.
+
     if (srcNodeIndex < dstNodeIndex)
     {
         /* src node is to the left of dst node:
          *     By B+ tree ordering properties, when we redistribute,
          *     take entries from the end of src, and prepend them to dst.
          */
-        srcOffset = srcHeader.freeSpaceOffset;
-        dstOffset = SIZEOF_HEADER_
-        while (true)
+        int srcOffset = srcIsLeaf ? srcHeaderLeaf.freeSpaceOffset : srcHeaderInterior.freeSpaceOffset;
+
+        int srcLastDataEntrySize;
+        int srcLastKeySize;
+
+        void *transferBuffer = malloc(PAGE_SIZE);
+        int transferBufferSize;
+
+        /* Invariants:
+         *     - srcOffset always starts at its freeSpaceOffset
+         *     - srcOffset is then decreased, by the size of its last entry (+ child pointer if interior)
+         *       which is adjacent to freeSpaceOffset.
+         *     => after these operations, srcOffset + entrySize = freeSpaceOffset.
+         *     => this is the space of the transfer: to be deleted from src and prepended to dst.
+         */
+        while (dstSpaceNeeded > 0)
         {
+            // Point srcOffset to the start of transfer buffer.
+            if (srcIsLeaf)
+            {
+                srcLastDataEntrySize = get<1>(srcDataEntriesWithSizes.back());
+                transferBufferSize = srcLastDataEntrySize;
+            }
+            else // Interior: 
+            {
+                // Take last key and subsequent child pointer.
+                srcLastKeySize = get<1>(srcKeysWithSizes.back());
+                transferBufferSize = srcLastKeySize + SIZEOF_CHILD_PAGENUM;
+            }
+            srcOffset -= transferBufferSize;
+            if (srcOffset < 0)
+                return -1;
 
+            // Can we safely delete the transfer buffer space from src?
             bool srcWillBeUnderfull;
-            willNodeBeUnderfull(srcNodePageData_copy, 
+            size_t srcSpaceUntilNotUnderfull_tmp;
+            rc = willNodeBeUnderfull(srcNodePageData_copy, transferBufferSize, srcWillBeUnderfull, srcSpaceUntilNotUnderfull_tmp);
+            if (rc != SUCCESS)
+                return rc;
+            if (srcWillBeUnderfull)
+                return -1; // src can't redistribute, failure.
 
-        }
+            void *dstTransferBufferStart = (char *)dstNodePageData_copy + dstHeaderSize;
+            
+            // Make space for transfer buffer as first entry in dst.
+            auto dstFreeSpaceOffset = dstIsLeaf ? dstHeaderLeaf.freeSpaceOffset : dstHeaderInterior.freeSpaceOffset;
+
+            memmove(
+                (char *)dstTransferBufferStart + transferBufferSize,
+                dstTransferBufferStart,
+                dstFreeSpaceOffset - dstHeaderSize
+            );
+
+            void *srcTransferBufferStart = (char *)srcNodePageData_copy + srcOffset;
+
+            // Load transfer buffer.
+            if (srcIsLeaf)
+            {
+                // Just take key + RID as is.
+                memcpy(transferBuffer, srcTransferBufferStart, transferBufferSize);
+            }
+            else
+            {
+                // Flip position of the child pointer.
+                int transferBufferOffset = 0;
+                memcpy(
+                    transferBuffer,
+                    (char *)srcTransferBufferStart + transferBufferSize - SIZEOF_CHILD_PAGENUM,
+                    SIZEOF_CHILD_PAGENUM
+                );
+                transferBufferOffset += SIZEOF_CHILD_PAGENUM;
+
+                memcpy(
+                    (char *)transferBuffer + transferBufferOffset,
+                    srcTransferBufferStart,
+                    transferBufferSize - SIZEOF_CHILD_PAGENUM
+                );
+            }
+
+            memcpy(dstTransferBufferStart, transferBuffer, transferBufferSize);
+
+            // Clear the transfer buffer from src.
+            memset(srcTransferBufferStart, 0, transferBufferSize);
+
+            // Update state.
+            dstSpaceNeeded -= transferBufferSize;
+
+            if (srcIsLeaf)
+            {
+                dstHeaderLeaf.freeSpaceOffset += transferBufferSize;
+                srcHeaderLeaf.freeSpaceOffset -= transferBufferSize;
+                dstHeaderLeaf.numEntries++;
+                srcHeaderLeaf.numEntries--;
+
+                dstDataEntriesWithSizes.insert(dstDataEntriesWithSizes.begin(), srcDataEntriesWithSizes.back());
+                srcDataEntriesWithSizes.pop_back();
+
+                dstKeysWithSizes.insert(dstKeysWithSizes.begin(), srcKeysWithSizes.back());
+                srcKeysWithSizes.pop_back();
+
+                dstRIDs.insert(dstRIDs.begin(), srcRIDs.back());
+                srcRIDs.pop_back();
+            }
+            else
+            {
+                dstHeaderInterior.freeSpaceOffset += transferBufferSize;
+                srcHeaderInterior.freeSpaceOffset -= transferBufferSize;
+                dstHeaderInterior.numEntries++;
+                srcHeaderInterior.numEntries--;
+
+                dstKeysWithSizes.insert(dstKeysWithSizes.begin(), srcKeysWithSizes.back());
+                srcKeysWithSizes.pop_back();
+
+                dstChildren.insert(dstChildren.begin(), srcChildren.back());
+                srcChildren.pop_back();
+            }
+
+        } // elihw: transferring entries from src to dst.
+        free(transferBuffer);
     }
     else if (dstNodeIndex < srcNodeIndex)
     {
@@ -1929,6 +2154,8 @@ RC IndexManager::redistributeEntries(IXFileHandle &ixfileHandle, void *parentNod
     {
         return -1; // Redistributing entries between the same node is undefined.
     }
+
+    return -1;
 }
 
 RC IndexManager::willNodeBeUnderfull(const void *nodePageData, size_t entrySize, bool &willBeUnderfull, size_t &spaceUntilNotUnderfull)
@@ -2191,3 +2418,12 @@ void freeDataEntriesWithSizes(vector<tuple<void *, int>> dataEntriesWithSizes)
     }
 }
 
+void freeEntriesWithSizes(vector<tuple<void *, int>> entriesWithSizes, bool isLeaf)
+{
+    if (isLeaf)
+    {
+        freeDataEntriesWithSizes(entriesWithSizes);
+        return;
+    }
+    freeKeysWithSizes(entriesWithSizes);
+}

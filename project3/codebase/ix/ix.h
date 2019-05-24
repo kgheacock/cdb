@@ -48,12 +48,6 @@ typedef struct
     int rightSibling;
 } HeaderLeaf;
 
-union Header
-{
-    HeaderLeaf leaf;
-    HeaderInterior interior;
-};
-
 class IX_ScanIterator;
 class IXFileHandle;
 class IndexManager
@@ -151,7 +145,8 @@ public:
                                      const void *targetKey,
                                      const RID targetRID);
 
-    static RC canRedistributeEntries(int srcNodePageNum, int dstNodePageNum, size_t dstSpaceNeeded);
+    RC redistributeEntries(IXFileHandle &ixfileHandle, const Attribute attribute, void *parentNodePageData, void *srcNodePageData, void * &srcNodePageData_copy, void *dstNodePageData, void * &dstNodePageData_copy, int srcNodeIndex, int dstNodeIndex, size_t dstSpaceNeeded);
+
 
 protected:
     IndexManager();
