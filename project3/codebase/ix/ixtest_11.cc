@@ -5,7 +5,8 @@
 
 IndexManager *indexManager;
 
-int testCase_11(const string &indexFileName, const Attribute &attribute){
+int testCase_11(const string &indexFileName, const Attribute &attribute)
+{
     // Create Index file
     // Open Index file
     // Insert large number of records
@@ -17,7 +18,8 @@ int testCase_11(const string &indexFileName, const Attribute &attribute){
     // Close Index
     // Destroy Index
 
-    cerr << endl << "***** In IX Test Case 11 *****" << endl;
+    cerr << endl
+         << "***** In IX Test Case 11 *****" << endl;
 
     RID rid;
     IXFileHandle ixfileHandle;
@@ -36,16 +38,17 @@ int testCase_11(const string &indexFileName, const Attribute &attribute){
     assert(rc == success && "indexManager::openFile() should not fail.");
 
     // insert entries
-    for(unsigned i = 0; i <= numOfTuples; i++)
+    for (unsigned i = 0; i <= numOfTuples; i++)
     {
-        key = i; 
+        key = i;
         rid.pageNum = key + 1;
         rid.slotNum = key + 2;
 
         rc = indexManager->insertEntry(ixfileHandle, attribute, &key, rid);
         assert(rc == success && "indexManager::insertEntry() should not fail.");
         inRecordNum += 1;
-        if (inRecordNum % 200000 == 0) {
+        if (inRecordNum % 200000 == 0)
+        {
             cerr << inRecordNum << " inserted - rid: " << rid.pageNum << " " << rid.slotNum << endl;
         }
     }
@@ -56,16 +59,18 @@ int testCase_11(const string &indexFileName, const Attribute &attribute){
 
     // Iterate
     cerr << endl;
-    while(ix_ScanIterator.getNextEntry(rid, &key) == success)
+    while (ix_ScanIterator.getNextEntry(rid, &key) == success)
     {
-        if (rid.pageNum != key + 1 || rid.slotNum != key + 2) {
+        if (rid.pageNum != key + 1 || rid.slotNum != key + 2)
+        {
             cerr << "Wrong entries output... The test failed." << endl;
             rc = ix_ScanIterator.close();
             rc = indexManager->closeFile(ixfileHandle);
             return fail;
         }
         outRecordNum += 1;
-        if (outRecordNum % 200000 == 0) {
+        if (outRecordNum % 200000 == 0)
+        {
             cerr << outRecordNum << " scanned. " << endl;
         }
     }
@@ -82,9 +87,9 @@ int testCase_11(const string &indexFileName, const Attribute &attribute){
     // Delete some tuples
     cerr << endl;
     unsigned deletedRecordNum = 0;
-    for(unsigned i = 5; i <= numOfTuples; i += 10)
+    for (unsigned i = 5; i <= numOfTuples; i += 10)
     {
-        key = i; 
+        key = i;
         rid.pageNum = key + 1;
         rid.slotNum = key + 2;
 
@@ -92,7 +97,8 @@ int testCase_11(const string &indexFileName, const Attribute &attribute){
         assert(rc == success && "indexManager::deleteEntry() should not fail.");
 
         deletedRecordNum += 1;
-        if (deletedRecordNum % 20000 == 0) {
+        if (deletedRecordNum % 20000 == 0)
+        {
             cerr << deletedRecordNum << " deleted. " << endl;
         }
     }
@@ -107,19 +113,20 @@ int testCase_11(const string &indexFileName, const Attribute &attribute){
     cerr << endl;
     // Iterate
     outRecordNum = 0;
-    while(ix_ScanIterator.getNextEntry(rid, &key) == success)
+    while (ix_ScanIterator.getNextEntry(rid, &key) == success)
     {
-        if (rid.pageNum != key + 1 || rid.slotNum != key + 2) {
+        if (rid.pageNum != key + 1 || rid.slotNum != key + 2)
+        {
             cerr << "Wrong entries output... The test failed." << endl;
             rc = ix_ScanIterator.close();
             rc = indexManager->closeFile(ixfileHandle);
             return fail;
         }
         outRecordNum += 1;
-        if (outRecordNum % 200000 == 0) {
+        if (outRecordNum % 200000 == 0)
+        {
             cerr << outRecordNum << " scanned. " << endl;
         }
-
     }
     cerr << outRecordNum << " scanned. " << endl;
 
@@ -135,9 +142,9 @@ int testCase_11(const string &indexFileName, const Attribute &attribute){
     // Insert the deleted entries again
     int reInsertedRecordNum = 0;
     cerr << endl;
-    for(unsigned i = 5; i <= numOfTuples; i += 10)
+    for (unsigned i = 5; i <= numOfTuples; i += 10)
     {
-        key = i; 
+        key = i;
         rid.pageNum = key + 1;
         rid.slotNum = key + 2;
 
@@ -145,7 +152,8 @@ int testCase_11(const string &indexFileName, const Attribute &attribute){
         assert(rc == success && "indexManager::insertEntry() should not fail.");
 
         reInsertedRecordNum += 1;
-        if (reInsertedRecordNum % 20000 == 0) {
+        if (reInsertedRecordNum % 20000 == 0)
+        {
             cerr << reInsertedRecordNum << " inserted - rid: " << rid.pageNum << " " << rid.slotNum << endl;
         }
     }
@@ -160,9 +168,10 @@ int testCase_11(const string &indexFileName, const Attribute &attribute){
     // Iterate
     cerr << endl;
     outRecordNum = 0;
-    while(ix_ScanIterator.getNextEntry(rid, &key) == success)
+    while (ix_ScanIterator.getNextEntry(rid, &key) == success)
     {
-        if (rid.pageNum != key + 1 || rid.slotNum != key + 2) {
+        if (rid.pageNum != key + 1 || rid.slotNum != key + 2)
+        {
             cerr << "Wrong entries output... The test failed." << endl;
             rc = ix_ScanIterator.close();
             rc = indexManager->closeFile(ixfileHandle);
@@ -170,15 +179,14 @@ int testCase_11(const string &indexFileName, const Attribute &attribute){
         }
         outRecordNum += 1;
 
-        if (outRecordNum % 200000 == 0) {
+        if (outRecordNum % 200000 == 0)
+        {
             cerr << outRecordNum << " scanned. " << endl;
         }
-
     }
 
     // Inconsistency?
-    if ((inRecordNum - deletedRecordNum + reInsertedRecordNum) != outRecordNum || inRecordNum == 0 
-         || reInsertedRecordNum == 0 || outRecordNum == 0)
+    if ((inRecordNum - deletedRecordNum + reInsertedRecordNum) != outRecordNum || inRecordNum == 0 || reInsertedRecordNum == 0 || outRecordNum == 0)
     {
         cerr << "Wrong entries output... The test failed." << endl;
         rc = ix_ScanIterator.close();
@@ -216,12 +224,14 @@ int main()
     remove("age_idx");
 
     RC result = testCase_11(indexFileName, attrAge);
-    if (result == success) {
+    if (result == success)
+    {
         cerr << "***** IX Test Case 11 finished. The result will be examined. *****" << endl;
         return success;
-    } else {
+    }
+    else
+    {
         cerr << "***** [FAIL] IX Test Case 11 failed. *****" << endl;
         return fail;
     }
 }
-

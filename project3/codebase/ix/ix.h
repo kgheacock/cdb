@@ -92,21 +92,21 @@ public:
                            const Attribute attribute,
                            const void *keyToDelete,
                            const RID &ridToDelete,
-                           void * &oldChildEntry,
+                           void *&oldChildEntry,
                            const int parentNodePageNum,
                            const int currentNodePageNum);
     RC deleteEntry_leaf(IXFileHandle &ixfileHandle,
                         const Attribute attribute,
                         const void *keyToDelete,
                         const RID &ridToDelete,
-                        void * &oldChildEntry,
+                        void *&oldChildEntry,
                         const int parentNodePageNum,
                         const int currentNodePageNum);
     RC deleteEntry_interior(IXFileHandle &ixfileHandle,
                             const Attribute attribute,
                             const void *keyToDelete,
                             const RID &ridToDelete,
-                            void * &oldChildEntry,
+                            void *&oldChildEntry,
                             const int parentNodePageNum,
                             const int currentNodePageNum);
 
@@ -119,13 +119,13 @@ public:
             bool highKeyInclusive,
             IX_ScanIterator &ix_ScanIterator);
     RC scan_by_pageNumber(IXFileHandle &ixfileHandle,
-            const Attribute &attribute,
-            const void *lowKey,
-            const void *highKey,
-            bool lowKeyInclusive,
-            bool highKeyInclusive,
-            IX_ScanIterator &ix_ScanIterator,
-            PageNum pageNumber);
+                          const Attribute &attribute,
+                          const void *lowKey,
+                          const void *highKey,
+                          bool lowKeyInclusive,
+                          bool highKeyInclusive,
+                          IX_ScanIterator &ix_ScanIterator,
+                          PageNum pageNumber);
 
     // Print the B+ tree in pre-order (in a JSON record format)
     void printBtree(IXFileHandle &ixfileHandle, const Attribute &attribute) const;
@@ -145,8 +145,7 @@ public:
                                      const void *targetKey,
                                      const RID targetRID);
 
-    RC redistributeEntries(IXFileHandle &ixfileHandle, const Attribute attribute, void *parentNodePageData, void *srcNodePageData, void * &srcNodePageData_copy, void *dstNodePageData, void * &dstNodePageData_copy, int srcNodeIndex, int dstNodeIndex, size_t dstSpaceNeeded);
-
+    RC redistributeEntries(IXFileHandle &ixfileHandle, const Attribute attribute, void *parentNodePageData, void *srcNodePageData, void *&srcNodePageData_copy, void *dstNodePageData, void *&dstNodePageData_copy, int srcNodeIndex, int dstNodeIndex, size_t dstSpaceNeeded);
 
 protected:
     IndexManager();
@@ -204,6 +203,7 @@ private:
     RC getRootPageNumber(const string indexFileName);
     RC updateRootPageNumber(const string indexFileName, const PageNum newRoot);
     RC getClosestSiblings(const Attribute attribute, const void *parentPageData, vector<tuple<int, int>> &siblings_PageNumWithIndex, const int myNodePageNum, int &myIndex);
+    RC findSubtree(IXFileHandle &ixFileHandle, const void *key, const Attribute &attribute, int nodePageNumber, int &leafPageNumber);
 };
 
 class IXFileHandle

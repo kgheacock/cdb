@@ -4,8 +4,6 @@
 #include <tuple>
 using namespace std;
 
-
-
 IndexManager *IndexManager::_index_manager = 0;
 PagedFileManager *IndexManager::_pf_manager = 0;
 
@@ -1199,17 +1197,120 @@ RC IndexManager::insertToTree(IXFileHandle &ixfileHandle, const Attribute &attri
 
 RC IndexManager::deleteEntry(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, const RID &rid)
 {
-    void *oldChildEntry = nullptr;
-    int parentNodePageNum = -1;
+    int leafNodePageNum = -1;
     int currentNodePageNum = rootPage;
-    return deleteEntry_subtree(ixfileHandle, attribute, key, rid, oldChildEntry, parentNodePageNum, currentNodePageNum);
+    auto rc = SUCCESS;
+    rc = findSubtree(ixfileHandle, key, attribute, currentNodePageNum, leafNodePageNum);
+    if (rc != SUCCESS)
+    {
+        return rc;
+    }
+    if (leafNodePageNum < 0)
+    {
+        return -1;
+    }
+    void *leafNodePage = malloc(PAGE_SIZE);
+    rc = ixfileHandle.readPage(leafNodePageNum, leafNodePage);
+    if (rc != SUCCESS)
+    {
+        free(leafNodePage);
+        return -1;
+    }
+    vector<tuple<void *, int>> leafsWithRID = getDataEntriesWithSizes_leaf(attribute, leafNodePage);
+    vector<RID> rids = getRIDs_leaf(attribute, leafsWithRID);
+    int offset = SIZEOF_HEADER_LEAF;
+    size_t freeSpaceOffset;
+    rc = findFreeSpaceOffset(leafNodePage, freeSpaceOffset);
+    if (rc != SUCCESS)
+    {
+        freeDataEntriesWithSizes(leafsWithRID);
+        free(leafNodePage);
+        return rc;
+    }
+    for (auto it = leafsWithRID.begin(); it != leafsWithRID.end(); it++)
+    {
+        int i = distance(leafsWithRID.begin(), it);
+        RID ridToCompare = rids[i];
+        void *keyToCompare = get<0>(getKeyDataWithSize(attribute, get<0>(*it)));
+        bool lt = false;
+        bool eq = false;
+        bool gt = false;
+        rc = compareKeyData(attribute, keyToCompare, key, lt, eq, gt);
+        //Entry not found
+        if (gt)
+        {
+            freeDataEntriesWithSizes(leafsWithRID);
+            free(leafNodePage);
+            return -1;
+        }
+        //Entry found
+        if (eq && rid == ridToCompare)
+        {
+            //DELETE ENTRY FROM PAGE
+            size_t sizeOfEntry = get<1>(*it);
+            memmove((char *)leafNodePage + offset, (char *)leafNodePage + offset + sizeOfEntry, freeSpaceOffset - offset - sizeOfEntry);
+            HeaderLeaf header;
+            rc = getHeaderLeaf(leafNodePage, header);
+            if (rc == SUCCESS)
+            {
+                header.freeSpaceOffset -= sizeOfEntry;
+                header.numEntries -= 1;
+                setHeaderLeaf(leafNodePage, header);
+                freeDataEntriesWithSizes(leafsWithRID);
+                rc = ixfileHandle.writePage(leafNodePageNum, leafNodePage);
+                free(leafNodePage);
+                return rc;
+            }
+            freeDataEntriesWithSizes(leafsWithRID);
+            free(leafNodePage);
+            return rc;
+        }
+        //Keep track of position in page
+        offset += get<1>(*it);
+    }
+
+    freeDataEntriesWithSizes(leafsWithRID);
+    free(leafNodePage);
+    return -1;
+}
+
+RC IndexManager::findSubtree(IXFileHandle &ixfileHandle, const void *key, const Attribute &attribute, int nodePageNumber, int &leafPageNumber)
+{
+    void *currentNodePageData = malloc(PAGE_SIZE);
+    if (currentNodePageData == nullptr)
+        return -1;
+    auto rc = ixfileHandle.readPage(nodePageNumber, currentNodePageData);
+    if (rc != SUCCESS)
+    {
+        free(currentNodePageData);
+        return rc;
+    }
+    bool isLeaf = isLeafPage(currentNodePageData);
+    if (isLeaf)
+    {
+        leafPageNumber = nodePageNumber;
+        free(currentNodePageData);
+        return SUCCESS;
+    }
+    else
+    {
+        int nextPage = -1;
+        auto rc = findTrafficCop(key, attribute, currentNodePageData, nextPage);
+        free(currentNodePageData);
+        if (nextPage < 0)
+            return -1;
+        if (rc != SUCCESS)
+            return rc;
+        findSubtree(ixfileHandle, key, attribute, nextPage, leafPageNumber);
+    }
+    return SUCCESS;
 }
 
 RC IndexManager::deleteEntry_subtree(IXFileHandle &ixfileHandle,
                                      const Attribute attribute,
                                      const void *keyToDelete,
                                      const RID &ridToDelete,
-                                     void * &oldChildEntry,
+                                     void *&oldChildEntry,
                                      const int parentNodePageNum,
                                      const int currentNodePageNum)
 {
@@ -1251,7 +1352,7 @@ RC IndexManager::deleteEntry_leaf(IXFileHandle &ixfileHandle,
                                   const Attribute attribute,
                                   const void *keyToDelete,
                                   const RID &ridToDelete,
-                                  void * &oldChildEntry,
+                                  void *&oldChildEntry,
                                   const int parentNodePageNum,
                                   const int currentNodePageNum)
 {
@@ -1303,7 +1404,7 @@ RC IndexManager::deleteEntry_leaf(IXFileHandle &ixfileHandle,
     }
     int keyToDeleteSize = get<1>(keyToDeleteDataWithSize);
     if (attribute.type == TypeVarChar)
-        keyToDeleteSize += sizeof(uint32_t);  // Must also include length of VarChar.
+        keyToDeleteSize += sizeof(uint32_t); // Must also include length of VarChar.
     int ridSize = sizeof(uint32_t) * 2;
     int entryToDeleteSize = keyToDeleteSize + ridSize;
 
@@ -1318,7 +1419,7 @@ RC IndexManager::deleteEntry_leaf(IXFileHandle &ixfileHandle,
         return rc;
     }
 
-    if ((uint32_t) currentNodePageNum == rootPage || !willBeUnderfull)
+    if ((uint32_t)currentNodePageNum == rootPage || !willBeUnderfull)
     {
         int firstEntryPosition_start = SIZEOF_HEADER_LEAF;
         int entryIndexToDelete = findIndexOfKeyWithRID(attribute, keysWithSizes, rids, keyToDelete, ridToDelete);
@@ -1397,7 +1498,6 @@ RC IndexManager::deleteEntry_leaf(IXFileHandle &ixfileHandle,
         }
 
         tuple<int, int> sibling_PageNumWithIndex = siblings_PageNumWithIndex.front();
-        
     }
     free(currentNodePageData);
     freeDataEntriesWithSizes(dataEntriesWithSizes);
@@ -1409,7 +1509,7 @@ RC IndexManager::deleteEntry_interior(IXFileHandle &ixfileHandle,
                                       const Attribute attribute,
                                       const void *keyToDelete,
                                       const RID &ridToDelete,
-                                      void * &oldChildEntry,
+                                      void *&oldChildEntry,
                                       const int parentNodePageNum,
                                       const int currentNodePageNum)
 {
@@ -1472,13 +1572,13 @@ RC IndexManager::scan(IXFileHandle &ixfileHandle,
 }
 
 RC IndexManager::scan_by_pageNumber(IXFileHandle &ixfileHandle,
-                      const Attribute &attribute,
-                      const void *lowKey,
-                      const void *highKey,
-                      bool lowKeyInclusive,
-                      bool highKeyInclusive,
-                      IX_ScanIterator &ix_ScanIterator,
-                      PageNum pageNumber)
+                                    const Attribute &attribute,
+                                    const void *lowKey,
+                                    const void *highKey,
+                                    bool lowKeyInclusive,
+                                    bool highKeyInclusive,
+                                    IX_ScanIterator &ix_ScanIterator,
+                                    PageNum pageNumber)
 {
     void *pageData = malloc(PAGE_SIZE);
     auto rc = ixfileHandle.readPage(pageNumber, pageData);
@@ -1845,7 +1945,7 @@ RC IndexManager::getClosestSiblings(const Attribute attribute, const void *paren
     }
 
     auto rightSiblingIndex = myIndex + 1;
-    if (rightSiblingIndex < (int) children.size())
+    if (rightSiblingIndex < (int)children.size())
         siblings_PageNumWithIndex.push_back(make_tuple(children[rightSiblingIndex], rightSiblingIndex));
 
     if (siblings_PageNumWithIndex.size() == 0)
@@ -1854,7 +1954,7 @@ RC IndexManager::getClosestSiblings(const Attribute attribute, const void *paren
     return SUCCESS;
 }
 
-RC IndexManager::redistributeEntries(IXFileHandle &ixfileHandle, const Attribute attribute, void *parentNodePageData, void *srcNodePageData, void * &srcNodePageData_copy, void *dstNodePageData, void * &dstNodePageData_copy, int srcNodeIndex, int dstNodeIndex, size_t dstSpaceNeeded)
+RC IndexManager::redistributeEntries(IXFileHandle &ixfileHandle, const Attribute attribute, void *parentNodePageData, void *srcNodePageData, void *&srcNodePageData_copy, void *dstNodePageData, void *&dstNodePageData_copy, int srcNodeIndex, int dstNodeIndex, size_t dstSpaceNeeded)
 {
     // Create copies of pages so there aren't side effects on input pages if redistribution fails.
     srcNodePageData_copy = calloc(PAGE_SIZE, sizeof(uint8_t));
@@ -1868,7 +1968,7 @@ RC IndexManager::redistributeEntries(IXFileHandle &ixfileHandle, const Attribute
         return -1;
     }
     memcpy(dstNodePageData_copy, dstNodePageData, PAGE_SIZE);
-    
+
     RC rc;
 
     HeaderLeaf srcHeaderLeaf;
@@ -2045,7 +2145,7 @@ RC IndexManager::redistributeEntries(IXFileHandle &ixfileHandle, const Attribute
                 srcLastDataEntrySize = get<1>(srcDataEntriesWithSizes.back());
                 transferBufferSize = srcLastDataEntrySize;
             }
-            else // Interior: 
+            else // Interior:
             {
                 // Take last key and subsequent child pointer.
                 srcLastKeySize = get<1>(srcKeysWithSizes.back());
@@ -2065,15 +2165,14 @@ RC IndexManager::redistributeEntries(IXFileHandle &ixfileHandle, const Attribute
                 return -1; // src can't redistribute, failure.
 
             void *dstTransferBufferStart = (char *)dstNodePageData_copy + dstHeaderSize;
-            
+
             // Make space for transfer buffer as first entry in dst.
             auto dstFreeSpaceOffset = dstIsLeaf ? dstHeaderLeaf.freeSpaceOffset : dstHeaderInterior.freeSpaceOffset;
 
             memmove(
                 (char *)dstTransferBufferStart + transferBufferSize,
                 dstTransferBufferStart,
-                dstFreeSpaceOffset - dstHeaderSize
-            );
+                dstFreeSpaceOffset - dstHeaderSize);
 
             void *srcTransferBufferStart = (char *)srcNodePageData_copy + srcOffset;
 
@@ -2090,15 +2189,13 @@ RC IndexManager::redistributeEntries(IXFileHandle &ixfileHandle, const Attribute
                 memcpy(
                     transferBuffer,
                     (char *)srcTransferBufferStart + transferBufferSize - SIZEOF_CHILD_PAGENUM,
-                    SIZEOF_CHILD_PAGENUM
-                );
+                    SIZEOF_CHILD_PAGENUM);
                 transferBufferOffset += SIZEOF_CHILD_PAGENUM;
 
                 memcpy(
                     (char *)transferBuffer + transferBufferOffset,
                     srcTransferBufferStart,
-                    transferBufferSize - SIZEOF_CHILD_PAGENUM
-                );
+                    transferBufferSize - SIZEOF_CHILD_PAGENUM);
             }
 
             memcpy(dstTransferBufferStart, transferBuffer, transferBufferSize);
@@ -2148,7 +2245,6 @@ RC IndexManager::redistributeEntries(IXFileHandle &ixfileHandle, const Attribute
          *     By B+ tree ordering properties, when we redistribute,
          *     take entries from the start of src, and append them to dst.
          */
-        
     }
     else
     {
@@ -2165,7 +2261,7 @@ RC IndexManager::willNodeBeUnderfull(const void *nodePageData, size_t entrySize,
     if (totalEntrySpace < 0)
         return -1;
 
-    size_t minimumThreshold = (size_t) totalEntrySpace / 2;
+    size_t minimumThreshold = (size_t)totalEntrySpace / 2;
 
     int firstEntryPosition_start = headerSize;
 
@@ -2179,9 +2275,9 @@ RC IndexManager::willNodeBeUnderfull(const void *nodePageData, size_t entrySize,
     if (usedEntrySpace < 0)
         return -1;
 
-    willBeUnderfull = (size_t) usedEntrySpace - entrySize < minimumThreshold;
+    willBeUnderfull = (size_t)usedEntrySpace - entrySize < minimumThreshold;
     if (willBeUnderfull)
-        spaceUntilNotUnderfull = minimumThreshold - ((size_t) usedEntrySpace - entrySize);
+        spaceUntilNotUnderfull = minimumThreshold - ((size_t)usedEntrySpace - entrySize);
 
     return SUCCESS;
 }
