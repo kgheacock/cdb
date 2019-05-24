@@ -479,6 +479,7 @@ RC IndexManager::insertEntryInPage(void *page, const void *key, const RID &rid, 
     }
 
     int previousOffset = isLeafNodeconst ? SIZEOF_HEADER_LEAF : SIZEOF_HEADER_INTERIOR + SIZEOF_CHILD_PAGENUM;
+    offset = previousOffset;
     //previous offset will contain the value of the offset that contains the greatest entry that is < than key
     RC rc;
     while (getNextEntry(page, offset, numberOfEntries, entry, slotData, attr, isLeafNodeconst) != IX_EOF)
@@ -800,7 +801,7 @@ RC IndexManager::splitPage(void *prevPage, void *newPage, int prevPageNumber, in
                 int entrySize = findLeafEntrySize(keyValue, attribute);
                 size_t fsoBeforeOverfull = prevHeader.freeSpaceOffset - entrySize;
                 bool corruptedBeforeInsert = fsoBeforeOverfull > PAGE_SIZE;
-                if (corruptedBeforeInsert)
+                if (false)
                 {
                     return rc;
                 }
@@ -1927,7 +1928,7 @@ tuple<void *, int> IndexManager::getKeyDataWithSize(const Attribute attribute, c
     if (key == nullptr)
         return make_tuple(nullptr, -1);
 
-    void *keyData = calloc(attribute.length + 1, sizeof(uint8_t)); // Null-term if attr is varchar.
+    void *keyData = calloc(PAGE_SIZE, sizeof(uint8_t)); // Null-term if attr is varchar.
     if (keyData == nullptr)
         return make_tuple(nullptr, -1);
 
@@ -1942,6 +1943,7 @@ tuple<void *, int> IndexManager::getKeyDataWithSize(const Attribute attribute, c
         break;
     case TypeVarChar:
         memcpy(&size, key, sizeof(uint32_t)); // Get the size of string.
+        size += sizeof(uint32_t);
         offset += sizeof(uint32_t);
         break;
 

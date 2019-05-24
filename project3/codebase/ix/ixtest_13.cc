@@ -23,7 +23,8 @@ int testCase_13(const string &indexFileName, const Attribute &attribute)
     // 7. Close Scan
     // 8. Close Index
     // 9. Destroy Index
-    cerr << endl << "***** In IX Test Case 13 *****" << endl;
+    cerr << endl
+         << "***** In IX Test Case 13 *****" << endl;
 
     RID rid;
     IXFileHandle ixfileHandle;
@@ -46,39 +47,40 @@ int testCase_13(const string &indexFileName, const Attribute &attribute)
     int numOfTuplesTobeScanned = 0;
 
     // insert entries
-    for(unsigned i = 1; i <= numOfTuples; i++)
+    for (unsigned i = 1; i <= numOfTuples; i++)
     {
         count = ((i - 1) % 26) + 1;
         *(int *)key = count;
-        for(unsigned j = 0; j < count; j++)
+        for (unsigned j = 0; j < count; j++)
         {
             key[4 + j] = 'a' + count - 1;
         }
 
         rid.pageNum = i;
         rid.slotNum = i;
-
         rc = indexManager->insertEntry(ixfileHandle, attribute, &key, rid);
         assert(rc == success && "indexManager::insertEntry() should not fail.");
 
-        if (count == tested_ascii) {
+        if (count == tested_ascii)
+        {
             numOfTuplesTobeScanned++;
         }
     }
-    
+
     // insert more entries
     *(int *)key = tested_ascii;
     for (unsigned j = 0; j < tested_ascii; j++)
     {
         key[4 + j] = 'a' + tested_ascii - 1;
     }
-    for (unsigned i = 1; i < numOfMoreTuples; i++){
+    for (unsigned i = 1; i < numOfMoreTuples; i++)
+    {
         rid.pageNum = 26 * (50 + i) + tested_ascii;
         rid.slotNum = 26 * (50 + i) + tested_ascii;
 
         rc = indexManager->insertEntry(ixfileHandle, attribute, &key, rid);
         assert(rc == success && "indexManager::insertEntry() should not fail.");
-        
+
         numOfTuplesTobeScanned++;
     }
 
@@ -91,14 +93,14 @@ int testCase_13(const string &indexFileName, const Attribute &attribute)
     assert(rc == success && "indexManager::collectCounterValues() should not fail.");
 
     cerr << "IO count after insertion: R W A - "
-        << readPageCount
-        << " " << writePageCount
-        << " " << appendPageCount << endl;
+         << readPageCount
+         << " " << writePageCount
+         << " " << appendPageCount << endl;
 
     //scan
     offset = tested_ascii;
     *(int *)key = offset;
-    for(unsigned j = 0; j < offset; j++)
+    for (unsigned j = 0; j < offset; j++)
     {
         key[4 + j] = 'a' + offset - 1;
     }
@@ -109,20 +111,24 @@ int testCase_13(const string &indexFileName, const Attribute &attribute)
     int count1 = 0;
     //iterate
     cerr << endl;
-    while(ix_ScanIterator.getNextEntry(rid, &key) == success)
+    while (ix_ScanIterator.getNextEntry(rid, &key) == success)
     {
-        if (((rid.pageNum - 1) % 26 + 1) != offset) {
-            cerr << "Wrong entry output... " << rid.pageNum << " " << rid.slotNum << " " << " - The test failed..." << endl;
+        if (((rid.pageNum - 1) % 26 + 1) != offset)
+        {
+            cerr << "Wrong entry output... " << rid.pageNum << " " << rid.slotNum << " "
+                 << " - The test failed..." << endl;
             return fail;
         }
         count1++;
-        if (count1 % 20 == 0) {
+        if (count1 % 20 == 0)
+        {
             cerr << count1 << " scanned - returned rid: " << rid.pageNum << " " << rid.slotNum << endl;
         }
     }
     cerr << endl;
 
-    if (count1 != numOfTuplesTobeScanned) {
+    if (count1 != numOfTuplesTobeScanned)
+    {
         cerr << "Wrong entry output... The test failed..." << endl;
         rc = ix_ScanIterator.close();
         rc = indexManager->closeFile(ixfileHandle);
@@ -135,9 +141,9 @@ int testCase_13(const string &indexFileName, const Attribute &attribute)
     assert(rc == success && "indexManager::collectCounterValues() should not fail.");
 
     cerr << "IO count after scan: R W A - "
-        << readPageCount
-        << " " << writePageCount
-        << " " << appendPageCount << endl;
+         << readPageCount
+         << " " << writePageCount
+         << " " << appendPageCount << endl;
 
     // Close Scan
     rc = ix_ScanIterator.close();
@@ -154,7 +160,6 @@ int testCase_13(const string &indexFileName, const Attribute &attribute)
     return success;
 }
 
-
 int main()
 {
     // Global Initialization
@@ -170,13 +175,14 @@ int main()
     remove("EmpName_idx");
 
     RC result = testCase_13(indexEmpNameFileName, attrEmpName);
-    if (result == success) {
+    if (result == success)
+    {
         cerr << "***** IX Test Case 13 finished. The result will be examined. *****" << endl;
         return success;
-    } else {
+    }
+    else
+    {
         cerr << "***** [FAIL] IX Test Case 13 failed. *****" << endl;
         return fail;
     }
-
 }
-
