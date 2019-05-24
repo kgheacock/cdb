@@ -145,7 +145,7 @@ public:
                                      const void *targetKey,
                                      const RID targetRID);
 
-    RC redistributeEntries(IXFileHandle &ixfileHandle, const Attribute attribute, void *parentNodePageData, void *srcNodePageData, void *&srcNodePageData_copy, void *dstNodePageData, void *&dstNodePageData_copy, int srcNodeIndex, int dstNodeIndex, size_t dstSpaceNeeded);
+    RC redistributeEntries(const Attribute attribute, void *parentNodePageData, void *srcNodePageData, void *&srcNodePageData_copy, void *dstNodePageData, void *&dstNodePageData_copy, int srcNodeIndex, int dstNodeIndex, size_t dstSpaceNeeded);
 
 protected:
     IndexManager();

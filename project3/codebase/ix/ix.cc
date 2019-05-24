@@ -774,6 +774,9 @@ RC IndexManager::splitPage(void *prevPage, void *newPage, int prevPageNumber, in
         firstHalfEntries++;
     }
     free(slotData);
+    free(keyValue);
+
+    keyValue = (char *)prevPage + previousOffset;
 
     RC rc;
     if (isLeafPage)
@@ -781,7 +784,6 @@ RC IndexManager::splitPage(void *prevPage, void *newPage, int prevPageNumber, in
         int leftChildSize = findLeafEntrySize(keyValue, attribute);
         if (leftChildSize < 0)
         {
-            free(keyValue);
             return -1;
         }
 
@@ -800,13 +802,11 @@ RC IndexManager::splitPage(void *prevPage, void *newPage, int prevPageNumber, in
                 bool corruptedBeforeInsert = fsoBeforeOverfull > PAGE_SIZE;
                 if (corruptedBeforeInsert)
                 {
-                    free(keyValue);
                     return rc;
                 }
             }
             else
             {
-                free(keyValue);
                 return rc;
             }
         }
@@ -815,7 +815,6 @@ RC IndexManager::splitPage(void *prevPage, void *newPage, int prevPageNumber, in
         rc = getHeaderLeaf(newPage, nextHeader);
         if (rc != SUCCESS)
         {
-            free(keyValue);
             return rc;
         }
 
@@ -851,13 +850,11 @@ RC IndexManager::splitPage(void *prevPage, void *newPage, int prevPageNumber, in
                 bool corruptedBeforeInsert = fsoBeforeOverfull > PAGE_SIZE;
                 if (corruptedBeforeInsert)
                 {
-                    free(keyValue);
                     return rc;
                 }
             }
             else
             {
-                free(keyValue);
                 return rc;
             }
         }
@@ -866,14 +863,12 @@ RC IndexManager::splitPage(void *prevPage, void *newPage, int prevPageNumber, in
         rc = getHeaderInterior(newPage, newHeader);
         if (rc != SUCCESS)
         {
-            free(keyValue);
             return rc;
         }
 
         int leftEntrySize = findInteriorEntrySize(keyValue, attribute);
         if (leftEntrySize < 0)
         {
-            free(keyValue);
             return -1;
         }
 
@@ -891,7 +886,6 @@ RC IndexManager::splitPage(void *prevPage, void *newPage, int prevPageNumber, in
         prevHeader.freeSpaceOffset = splitPoint;
         setHeaderInterior(prevPage, prevHeader);
     }
-    free(keyValue);
     return SUCCESS;
 }
 
@@ -1498,6 +1492,48 @@ RC IndexManager::deleteEntry_leaf(IXFileHandle &ixfileHandle,
         }
 
         tuple<int, int> sibling_PageNumWithIndex = siblings_PageNumWithIndex.front();
+        int siblingPageNum = get<0>(sibling_PageNumWithIndex);
+        int siblingNodeIndex = get<1>(sibling_PageNumWithIndex);
+
+        void *siblingNodePageData = malloc(PAGE_SIZE);
+        if (siblingNodePageData == nullptr)
+        {
+            free(parentNodePageData);
+            return -1;
+        }
+
+        rc = ixfileHandle.readPage(siblingPageNum, siblingNodePageData);
+        if (rc != SUCCESS)
+        {
+            free(parentNodePageData);
+            free(siblingNodePageData);
+            return rc;
+        }
+
+        void *siblingNodePageData_copy;
+        void *currentNodePageData_copy;
+        rc = redistributeEntries(
+            attribute,
+            parentNodePageData,
+            siblingNodePageData,
+            siblingNodePageData_copy,
+            currentNodePageData,
+            currentNodePageData_copy,
+            siblingNodeIndex,
+            currentNodeIndex,
+            spaceUntilNotUnderfull);
+        if (rc == SUCCESS)
+        {
+            return -1;
+        }
+        else if (rc == IX_CANT_REDISTRIBUTE)
+        {
+            return -1;
+        }
+        else
+        {
+            return -1;
+        }
     }
     free(currentNodePageData);
     freeDataEntriesWithSizes(dataEntriesWithSizes);
@@ -1954,7 +1990,7 @@ RC IndexManager::getClosestSiblings(const Attribute attribute, const void *paren
     return SUCCESS;
 }
 
-RC IndexManager::redistributeEntries(IXFileHandle &ixfileHandle, const Attribute attribute, void *parentNodePageData, void *srcNodePageData, void *&srcNodePageData_copy, void *dstNodePageData, void *&dstNodePageData_copy, int srcNodeIndex, int dstNodeIndex, size_t dstSpaceNeeded)
+RC IndexManager::redistributeEntries(const Attribute attribute, void *parentNodePageData, void *srcNodePageData, void *&srcNodePageData_copy, void *dstNodePageData, void *&dstNodePageData_copy, int srcNodeIndex, int dstNodeIndex, size_t dstSpaceNeeded)
 {
     // Create copies of pages so there aren't side effects on input pages if redistribution fails.
     srcNodePageData_copy = calloc(PAGE_SIZE, sizeof(uint8_t));
@@ -1973,7 +2009,7 @@ RC IndexManager::redistributeEntries(IXFileHandle &ixfileHandle, const Attribute
 
     HeaderLeaf srcHeaderLeaf;
     HeaderInterior srcHeaderInterior;
-    bool srcIsLeaf = isLeafPage(srcNodePageData);
+    bool srcIsLeaf = isLeafPage(srcNodePageData_copy);
     auto srcHeaderSize = srcIsLeaf ? SIZEOF_HEADER_LEAF : SIZEOF_HEADER_INTERIOR;
     vector<tuple<void *, int>> srcDataEntriesWithSizes;
     vector<tuple<void *, int>> srcKeysWithSizes;
@@ -1981,7 +2017,7 @@ RC IndexManager::redistributeEntries(IXFileHandle &ixfileHandle, const Attribute
     vector<RID> srcRIDs;
     if (srcIsLeaf)
     {
-        rc = getHeaderLeaf(srcNodePageData, srcHeaderLeaf);
+        rc = getHeaderLeaf(srcNodePageData_copy, srcHeaderLeaf);
         if (rc != SUCCESS)
         {
             free(srcNodePageData_copy);
@@ -2016,7 +2052,7 @@ RC IndexManager::redistributeEntries(IXFileHandle &ixfileHandle, const Attribute
     }
     else
     {
-        rc = getHeaderInterior(srcNodePageData, srcHeaderInterior);
+        rc = getHeaderInterior(srcNodePageData_copy, srcHeaderInterior);
         if (rc != SUCCESS)
         {
             free(srcNodePageData_copy);
@@ -2044,7 +2080,7 @@ RC IndexManager::redistributeEntries(IXFileHandle &ixfileHandle, const Attribute
 
     HeaderLeaf dstHeaderLeaf;
     HeaderInterior dstHeaderInterior;
-    bool dstIsLeaf = isLeafPage(dstNodePageData);
+    bool dstIsLeaf = isLeafPage(dstNodePageData_copy);
     auto dstHeaderSize = dstIsLeaf ? SIZEOF_HEADER_LEAF : SIZEOF_HEADER_INTERIOR;
     vector<tuple<void *, int>> dstDataEntriesWithSizes;
     vector<tuple<void *, int>> dstKeysWithSizes;
@@ -2052,7 +2088,7 @@ RC IndexManager::redistributeEntries(IXFileHandle &ixfileHandle, const Attribute
     vector<RID> dstRIDs;
     if (dstIsLeaf)
     {
-        rc = getHeaderLeaf(dstNodePageData, dstHeaderLeaf);
+        rc = getHeaderLeaf(dstNodePageData_copy, dstHeaderLeaf);
         if (rc != SUCCESS)
         {
             free(dstNodePageData_copy);
@@ -2087,7 +2123,7 @@ RC IndexManager::redistributeEntries(IXFileHandle &ixfileHandle, const Attribute
     }
     else
     {
-        rc = getHeaderInterior(dstNodePageData, dstHeaderInterior);
+        rc = getHeaderInterior(dstNodePageData_copy, dstHeaderInterior);
         if (rc != SUCCESS)
         {
             free(dstNodePageData_copy);
@@ -2116,13 +2152,15 @@ RC IndexManager::redistributeEntries(IXFileHandle &ixfileHandle, const Attribute
     if (srcIsLeaf != dstIsLeaf)
         return -1; // Can't redistribute between leaf and interior.
 
+    bool areLeaves = srcIsLeaf;
+
     if (srcNodeIndex < dstNodeIndex)
     {
         /* src node is to the left of dst node:
          *     By B+ tree ordering properties, when we redistribute,
          *     take entries from the end of src, and prepend them to dst.
          */
-        int srcOffset = srcIsLeaf ? srcHeaderLeaf.freeSpaceOffset : srcHeaderInterior.freeSpaceOffset;
+        int srcOffset = areLeaves ? srcHeaderLeaf.freeSpaceOffset : srcHeaderInterior.freeSpaceOffset;
 
         int srcLastDataEntrySize;
         int srcLastKeySize;
@@ -2131,6 +2169,7 @@ RC IndexManager::redistributeEntries(IXFileHandle &ixfileHandle, const Attribute
         int transferBufferSize;
 
         /* Invariants:
+         *     - dstOffset (buffer start for transfer) is always after its header.
          *     - srcOffset always starts at its freeSpaceOffset
          *     - srcOffset is then decreased, by the size of its last entry (+ child pointer if interior)
          *       which is adjacent to freeSpaceOffset.
@@ -2140,7 +2179,7 @@ RC IndexManager::redistributeEntries(IXFileHandle &ixfileHandle, const Attribute
         while (dstSpaceNeeded > 0)
         {
             // Point srcOffset to the start of transfer buffer.
-            if (srcIsLeaf)
+            if (areLeaves)
             {
                 srcLastDataEntrySize = get<1>(srcDataEntriesWithSizes.back());
                 transferBufferSize = srcLastDataEntrySize;
@@ -2162,12 +2201,12 @@ RC IndexManager::redistributeEntries(IXFileHandle &ixfileHandle, const Attribute
             if (rc != SUCCESS)
                 return rc;
             if (srcWillBeUnderfull)
-                return -1; // src can't redistribute, failure.
+                return IX_CANT_REDISTRIBUTE;
 
             void *dstTransferBufferStart = (char *)dstNodePageData_copy + dstHeaderSize;
 
             // Make space for transfer buffer as first entry in dst.
-            auto dstFreeSpaceOffset = dstIsLeaf ? dstHeaderLeaf.freeSpaceOffset : dstHeaderInterior.freeSpaceOffset;
+            auto dstFreeSpaceOffset = areLeaves ? dstHeaderLeaf.freeSpaceOffset : dstHeaderInterior.freeSpaceOffset;
 
             memmove(
                 (char *)dstTransferBufferStart + transferBufferSize,
@@ -2177,7 +2216,7 @@ RC IndexManager::redistributeEntries(IXFileHandle &ixfileHandle, const Attribute
             void *srcTransferBufferStart = (char *)srcNodePageData_copy + srcOffset;
 
             // Load transfer buffer.
-            if (srcIsLeaf)
+            if (areLeaves)
             {
                 // Just take key + RID as is.
                 memcpy(transferBuffer, srcTransferBufferStart, transferBufferSize);
@@ -2206,7 +2245,7 @@ RC IndexManager::redistributeEntries(IXFileHandle &ixfileHandle, const Attribute
             // Update state.
             dstSpaceNeeded -= transferBufferSize;
 
-            if (srcIsLeaf)
+            if (areLeaves)
             {
                 dstHeaderLeaf.freeSpaceOffset += transferBufferSize;
                 srcHeaderLeaf.freeSpaceOffset -= transferBufferSize;
@@ -2245,13 +2284,145 @@ RC IndexManager::redistributeEntries(IXFileHandle &ixfileHandle, const Attribute
          *     By B+ tree ordering properties, when we redistribute,
          *     take entries from the start of src, and append them to dst.
          */
+        int srcFirstDataEntrySize;
+        int srcFirstKeySize;
+
+        void *transferBuffer = malloc(PAGE_SIZE);
+        int transferBufferSize;
+
+        /* Invariants:
+         *     - srcOffset always starts directly after its header.
+         *     - Always insert at dst's freeSpaceOffset
+         */
+        while (dstSpaceNeeded > 0)
+        {
+            // Point srcOffset to the start of transfer buffer.
+            if (areLeaves)
+            {
+                srcFirstDataEntrySize = get<1>(srcDataEntriesWithSizes.front());
+                transferBufferSize = srcFirstDataEntrySize;
+            }
+            else // Interior:
+            {
+                // Take last key and preceding child pointer.
+                srcFirstKeySize = get<1>(srcKeysWithSizes.front());
+                transferBufferSize = SIZEOF_CHILD_PAGENUM + srcFirstKeySize;
+            }
+
+            // Can we safely delete the transfer buffer space from src?
+            bool srcWillBeUnderfull;
+            size_t srcSpaceUntilNotUnderfull_tmp;
+            rc = willNodeBeUnderfull(srcNodePageData_copy, transferBufferSize, srcWillBeUnderfull, srcSpaceUntilNotUnderfull_tmp);
+            if (rc != SUCCESS)
+                return rc;
+            if (srcWillBeUnderfull)
+                return IX_CANT_REDISTRIBUTE;
+
+            size_t dstFreeSpaceOffset;
+            size_t srcFreeSpaceOffset;
+            if (areLeaves)
+            {
+                dstFreeSpaceOffset = dstHeaderLeaf.freeSpaceOffset;
+                srcFreeSpaceOffset = srcHeaderLeaf.freeSpaceOffset;
+            }
+            else
+            {
+                dstFreeSpaceOffset = dstHeaderInterior.freeSpaceOffset;
+                srcFreeSpaceOffset = srcHeaderInterior.freeSpaceOffset;
+            }
+
+            void *dstTransferBufferStart = (char *)dstNodePageData_copy + dstFreeSpaceOffset;
+            void *srcTransferBufferStart = (char *)srcNodePageData_copy + srcHeaderSize;
+
+            // Load transfer buffer.
+            if (areLeaves)
+            {
+                // Just take key + RID as is.
+                memcpy(transferBuffer, srcTransferBufferStart, transferBufferSize);
+            }
+            else
+            {
+                // Flip position of the child pointer.
+
+                int transferBufferOffset = 0;
+                // Copy entry first.
+                memcpy(
+                    transferBuffer,
+                    (char *)srcTransferBufferStart + SIZEOF_CHILD_PAGENUM,
+                    transferBufferSize - SIZEOF_CHILD_PAGENUM);
+                transferBufferOffset += (transferBufferSize - SIZEOF_CHILD_PAGENUM);
+
+                // Then copy child.
+                memcpy(
+                    (char *)transferBuffer + transferBufferOffset,
+                    srcTransferBufferStart,
+                    SIZEOF_CHILD_PAGENUM);
+            }
+
+            // Append to dst.
+            memcpy(dstTransferBufferStart, transferBuffer, transferBufferSize);
+
+            // Shift subsequent entries into the transfer buffer's place.
+            memmove(
+                srcTransferBufferStart,
+                (char *)srcTransferBufferStart + transferBufferSize,
+                srcFreeSpaceOffset - (srcHeaderSize + transferBufferSize));
+
+            // Clear the space that was shifted.
+            memset((char *)srcNodePageData_copy + (srcFreeSpaceOffset - transferBufferSize), 0, transferBufferSize);
+
+            // Update state.
+            dstSpaceNeeded -= transferBufferSize;
+
+            if (areLeaves)
+            {
+                dstHeaderLeaf.freeSpaceOffset += transferBufferSize;
+                srcHeaderLeaf.freeSpaceOffset -= transferBufferSize;
+                dstHeaderLeaf.numEntries++;
+                srcHeaderLeaf.numEntries--;
+
+                dstDataEntriesWithSizes.push_back(srcDataEntriesWithSizes.front());
+                srcDataEntriesWithSizes.erase(srcDataEntriesWithSizes.begin());
+
+                dstKeysWithSizes.push_back(srcKeysWithSizes.front());
+                srcKeysWithSizes.erase(srcKeysWithSizes.begin());
+
+                dstRIDs.push_back(srcRIDs.front());
+                srcRIDs.erase(srcRIDs.begin());
+            }
+            else
+            {
+                dstHeaderInterior.freeSpaceOffset += transferBufferSize;
+                srcHeaderInterior.freeSpaceOffset -= transferBufferSize;
+                dstHeaderInterior.numEntries++;
+                srcHeaderInterior.numEntries--;
+
+                dstKeysWithSizes.push_back(srcKeysWithSizes.front());
+                srcKeysWithSizes.erase(srcKeysWithSizes.begin());
+
+                dstChildren.push_back(srcChildren.front());
+                srcChildren.erase(srcChildren.begin());
+            }
+
+        } // elihw: transferring entries from src to dst.
+        free(transferBuffer);
     }
     else
     {
         return -1; // Redistributing entries between the same node is undefined.
     }
 
-    return -1;
+    if (areLeaves)
+    {
+        setHeaderLeaf(dstNodePageData_copy, dstHeaderLeaf);
+        setHeaderLeaf(srcNodePageData_copy, srcHeaderLeaf);
+    }
+    else
+    {
+        setHeaderInterior(dstNodePageData_copy, dstHeaderInterior);
+        setHeaderInterior(srcNodePageData_copy, srcHeaderInterior);
+    }
+    return SUCCESS;
 }
 
 RC IndexManager::willNodeBeUnderfull(const void *nodePageData, size_t entrySize, bool &willBeUnderfull, size_t &spaceUntilNotUnderfull)
