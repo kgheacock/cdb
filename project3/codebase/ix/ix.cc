@@ -776,6 +776,9 @@ RC IndexManager::splitPage(void *prevPage, void *newPage, int prevPageNumber, in
         firstHalfEntries++;
     }
     free(slotData);
+    free(keyValue);
+
+    keyValue = (char *)prevPage + previousOffset;
 
     RC rc;
     if (isLeafPage)
@@ -783,7 +786,6 @@ RC IndexManager::splitPage(void *prevPage, void *newPage, int prevPageNumber, in
         int leftChildSize = findLeafEntrySize(keyValue, attribute);
         if (leftChildSize < 0)
         {
-            free(keyValue);
             return -1;
         }
 
@@ -802,13 +804,11 @@ RC IndexManager::splitPage(void *prevPage, void *newPage, int prevPageNumber, in
                 bool corruptedBeforeInsert = fsoBeforeOverfull > PAGE_SIZE;
                 if (corruptedBeforeInsert)
                 {
-                    free(keyValue);
                     return rc;
                 }
             }
             else
             {
-                free(keyValue);
                 return rc;
             }
         }
@@ -817,7 +817,6 @@ RC IndexManager::splitPage(void *prevPage, void *newPage, int prevPageNumber, in
         rc = getHeaderLeaf(newPage, nextHeader);
         if (rc != SUCCESS)
         {
-            free(keyValue);
             return rc;
         }
 
@@ -853,13 +852,11 @@ RC IndexManager::splitPage(void *prevPage, void *newPage, int prevPageNumber, in
                 bool corruptedBeforeInsert = fsoBeforeOverfull > PAGE_SIZE;
                 if (corruptedBeforeInsert)
                 {
-                    free(keyValue);
                     return rc;
                 }
             }
             else
             {
-                free(keyValue);
                 return rc;
             }
         }
@@ -868,14 +865,12 @@ RC IndexManager::splitPage(void *prevPage, void *newPage, int prevPageNumber, in
         rc = getHeaderInterior(newPage, newHeader);
         if (rc != SUCCESS)
         {
-            free(keyValue);
             return rc;
         }
 
         int leftEntrySize = findInteriorEntrySize(keyValue, attribute);
         if (leftEntrySize < 0)
         {
-            free(keyValue);
             return -1;
         }
 
@@ -893,7 +888,6 @@ RC IndexManager::splitPage(void *prevPage, void *newPage, int prevPageNumber, in
         prevHeader.freeSpaceOffset = splitPoint;
         setHeaderInterior(prevPage, prevHeader);
     }
-    free(keyValue);
     return SUCCESS;
 }
 
