@@ -45,12 +45,15 @@ using namespace std;
 #define INDEXES_TABLE_NAME           "Indexes"
 #define INDEXES_TABLE_ID             3
 
-#define INDEXES_COL_TABLE_ID         "table-id"
+#define INDEXES_COL_TABLE_NAME       "table-name"
 #define INDEXES_COL_COLUMN_NAME      "attr-name"
+#define INDEXES_COL_FILE_NAME        "file-name"
+#define INDEXES_COL_TABLE_NAME_SIZE  50
 #define INDEXES_COL_COLUMN_NAME_SIZE 50
+#define INDEXES_COL_FILE_NAME_SIZE   50
 
-// 1 null byte, 2 integer fiels and 1 varchar
-#define INDEXES_RECORD_DATA_SIZE 1 + 2 * INT_SIZE + INDEXES_COL_COLUMN_NAME_SIZE
+// 1 null byte, 3 integer fields and 3 varchars
+#define INDEXES_RECORD_DATA_SIZE 1 + 3 * INT_SIZE + INDEXES_COL_TABLE_NAME_SIZE + INDEXES_COL_COLUMN_NAME_SIZE + INDEXES_COL_FILE_NAME_SIZE
 
 # define RM_EOF (-1)  // end of a scan operator
 
@@ -164,14 +167,14 @@ private:
   // Prepare an entry for the Table/Column/Index table
   void prepareTablesRecordData(int32_t id, bool system, const string &tableName, void *data);
   void prepareColumnsRecordData(int32_t id, int32_t pos, Attribute attr, void *data);
-  void prepareIndexesRecordData(int32_t id, const string &attrName, void *data);
+  void prepareIndexesRecordData(const string &tableName, const string &attrName, void *data);
   
   // Given a table ID and recordDescriptor, creates entries in Column table
   RC insertColumns(int32_t id, const vector<Attribute> &recordDescriptor);
   // Given table ID, system flag, and table name, creates entry in Table table
   RC insertTable(int32_t id, int32_t system, const string &tableName);
   // Given a table ID and attribute name, creates entry in Index table
-  RC insertIndex(int32_t id, const string &attrName);
+  RC insertIndex(const string &tableName, const string &attrName);
 
   // Get next table ID for creating table
   RC getNextTableID(int32_t &table_id);

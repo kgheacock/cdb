@@ -516,16 +516,21 @@ vector<Attribute> RelationManager::createIndexDescriptor()
     vector<Attribute> id;
 
     Attribute attr;
-    attr.name = INDEXES_COL_TABLE_ID;  
-    attr.type = TypeInt;
-    attr.length = (AttrLength)INT_SIZE;
+    attr.name = INDEXES_COL_TABLE_NAME;  
+    attr.type = TypeVarChar;
+    attr.length = (AttrLength)INDEXES_COL_TABLE_NAME_SIZE;
     id.push_back(attr);
 
     attr.name = INDEXES_COL_COLUMN_NAME;
     attr.type = TypeVarChar;
     attr.length = (AttrLength)INDEXES_COL_COLUMN_NAME_SIZE;
     id.push_back(attr);
-    
+
+    attr.name = INDEXES_COL_FILE_NAME;
+    attr.type = TypeVarChar;
+    attr.length = (AttrLength)INDEXES_COL_FILE_NAME_SIZE;
+    id.push_back(attr);
+
     return id;
 }
 
@@ -597,27 +602,37 @@ void RelationManager::prepareColumnsRecordData(int32_t id, int32_t pos, Attribut
     offset += INT_SIZE;
 }
 
-// Creates the Index table entry for the given tableName
-void RelationManager::prepareIndexesRecordData(int32_t id, const string &attrName, void *data)
+// Prepares the Index table entry for the given name and attribute
+void RelationManager::prepareIndexesRecordData(const string &tableName, const string &attrName, void *data)
 {
     unsigned offset = 0;
+
+    int32_t name_len = tableName.length();
     int32_t attr_len = attrName.length();
+    string table_file_name = getFileName(tableName);
+    int32_t file_name_len = table_file_name.length();
 
     // All fields non-null
     char null = 0;
     // Copy in null indicator
     memcpy((char*) data + offset, &null, 1);
     offset += 1;
-    // Copy in table id
-    memcpy((char*) data + offset, &id, INT_SIZE);
-    offset += INT_SIZE;
+    // Copy in varchar table name
+    memcpy((char*) data + offset, &name_len, VARCHAR_LENGTH_SIZE);
+    offset += VARCHAR_LENGTH_SIZE;
+    memcpy((char*) data + offset, tableName.c_str(), name_len);
+    offset += name_len;
     // Copy in varchar attribue name
     memcpy((char*) data + offset, &attr_len, VARCHAR_LENGTH_SIZE);
     offset += VARCHAR_LENGTH_SIZE;
     memcpy((char*) data + offset, attrName.c_str(), attr_len);
     offset += attr_len;
+    // Copy in varchar file name
+    memcpy((char*) data + offset, &file_name_len, VARCHAR_LENGTH_SIZE);
+    offset += VARCHAR_LENGTH_SIZE;
+    memcpy((char*) data + offset, table_file_name.c_str(), file_name_len);
+    offset += file_name_len; 
 }
-
 // Insert the given columns into the Columns table
 RC RelationManager::insertColumns(int32_t id, const vector<Attribute> &recordDescriptor)
 {
@@ -666,7 +681,7 @@ RC RelationManager::insertTable(int32_t id, int32_t system, const string &tableN
     return rc;
 }
 
-RC RelationManager::insertIndex(int32_t id, const string &attrName)
+RC RelationManager::insertIndex(const string &tableName, const string &attrName)
 {
     FileHandle fileHandle;
     RID rid;
@@ -678,7 +693,7 @@ RC RelationManager::insertIndex(int32_t id, const string &attrName)
         return rc;
 
     void *indexData = malloc (INDEXES_RECORD_DATA_SIZE);
-    prepareIndexesRecordData(id, attrName, indexData);
+    prepareIndexesRecordData(tableName, attrName, indexData);
     rc = rbfm->insertRecord(fileHandle, indexDescriptor, indexData, rid);
 
     rbfm->closeFile(fileHandle);
