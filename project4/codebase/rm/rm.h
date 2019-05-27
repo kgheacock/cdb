@@ -42,14 +42,15 @@ using namespace std;
 #define COLUMNS_RECORD_DATA_SIZE 1 + 5 * INT_SIZE + COLUMNS_COL_COLUMN_NAME_SIZE
 
 // Definitions for Index table
-#define INDEX_TABLE_NAME           "Indexes"
-#define INDEX_TABLE_ID             3
-#define INDEX_COL_TABLE_NAME       "index-name"
-#define INDEX_COL_COLUMN_NAME      "attr-name"
-#define INDEX_COL_FILE_NAME        "index-name"
-#define INDEX_COL_TABLE_NAME_SIZE  50
-#define INDEX_COL_FILE_NAME_SIZE   50
-#define INDEX_COL_COLUMN_NAME_SIZE 50
+#define INDEXES_TABLE_NAME           "Indexes"
+#define INDEXES_TABLE_ID             3
+
+#define INDEXES_COL_TABLE_ID         "table-id"
+#define INDEXES_COL_COLUMN_NAME      "attr-name"
+#define INDEXES_COL_COLUMN_NAME_SIZE 50
+
+// 1 null byte, 2 integer fiels and 1 varchar
+#define INDEXES_RECORD_DATA_SIZE 1 + 2 * INT_SIZE + INDEXES_COL_COLUMN_NAME_SIZE
 
 # define RM_EOF (-1)  // end of a scan operator
 
@@ -155,24 +156,22 @@ private:
   static string getFileName(const char *tableName);
   static string getFileName(const string &tableName);
 
-  // Create recordDescriptor for Table/Column tables
+  // Create recordDescriptor for Table/Column/Index tables
   static vector<Attribute> createTableDescriptor();
   static vector<Attribute> createColumnDescriptor();
   static vector<Attribute> createIndexDescriptor();
 
-  // Prepare an entry for the Table/Column table
+  // Prepare an entry for the Table/Column/Index table
   void prepareTablesRecordData(int32_t id, bool system, const string &tableName, void *data);
   void prepareColumnsRecordData(int32_t id, int32_t pos, Attribute attr, void *data);
-  void prepareIndexRecordData(const string &tableName, const string &, void *data);
+  void prepareIndexesRecordData(int32_t id, const string &attrName, void *data);
   
   // Given a table ID and recordDescriptor, creates entries in Column table
   RC insertColumns(int32_t id, const vector<Attribute> &recordDescriptor);
   // Given table ID, system flag, and table name, creates entry in Table table
   RC insertTable(int32_t id, int32_t system, const string &tableName);
-  /* TODO
-  // Given x, y, z, creates entry in Index table
-  RC insertIndex();
-  */
+  // Given a table ID and attribute name, creates entry in Index table
+  RC insertIndex(int32_t id, const string &attrName);
 
   // Get next table ID for creating table
   RC getNextTableID(int32_t &table_id);
