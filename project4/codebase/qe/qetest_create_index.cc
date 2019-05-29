@@ -88,7 +88,7 @@ int TestCreateIndex() {
 		return rc;
     }
 
-	return SUCCESS;
+    return SUCCESS;
 }
 
 
