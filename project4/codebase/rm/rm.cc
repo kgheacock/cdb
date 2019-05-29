@@ -1088,7 +1088,72 @@ RC RelationManager::indexScan(const string &tableName,
                       bool highKeyInclusive,
                       RM_IndexScanIterator &rm_IndexScanIterator)
 {
-    return -1;
+    RC rc;
+
+    // Ensure table exists before creating index.
+    int tableID_tmp;
+    rc = getTableID(tableName, tableID_tmp);
+    if (rc != SUCCESS)
+        return rc;
+
+    // Ensure index on attribute is attribute of table.
+    Attribute targetAttr; // Get the matching attribute.
+    vector<Attribute> tableAttrs;
+    rc = getAttributes(tableName, tableAttrs);
+    if (rc != SUCCESS)
+        return rc;
+    bool hasTargetAttr = false;
+    for (auto attr : tableAttrs)
+    {
+        if (attr.name.compare(attributeName) == 0)
+        {
+            hasTargetAttr = true;
+            targetAttr = attr;
+            break;
+        }
+    }
+    if (!hasTargetAttr)
+        return RM_ATTR_DOES_NOT_EXIST;
+
+    IndexManager* ixm = IndexManager::instance();
+
+    IXFileHandle ixfileHandle;
+    rc = ixm->openFile(getIndexFileName(tableName, attributeName), ixfileHandle);
+    if (rc != SUCCESS)
+        return rc;
+
+    IX_ScanIterator ixsi;
+    rc = ixm->scan(ixfileHandle, targetAttr, lowKey, highKey, lowKeyInclusive, highKeyInclusive, ixsi);
+    if (rc != SUCCESS)
+        return rc;
+
+    rm_IndexScanIterator.indexFileHandle = ixfileHandle;
+    rm_IndexScanIterator.indexScanIterator = ixsi;
+    rm_IndexScanIterator.closed = false;
+
+    return SUCCESS;
+}
+
+RC RM_IndexScanIterator::getNextEntry(RID &rid, void *key)
+{
+    if (closed)
+        return -1;
+    return indexScanIterator.getNextEntry(rid, key);
+}
+
+RC RM_IndexScanIterator::close()
+{
+    if (closed)
+        return -1;
+
+    RC rc;
+
+    rc = indexScanIterator.close();
+    if (rc != SUCCESS)
+        return rc;
+
+    IndexManager* ixm = IndexManager::instance();
+    return ixm->closeFile(indexFileHandle);
 }
 
 // Close our file handle, rbfm_scaniterator
