@@ -993,7 +993,91 @@ RC RelationManager::createIndex(const string &tableName, const string &attribute
 
 RC RelationManager::destroyIndex(const string &tableName, const string &attributeName)
 {
-    return -1;
+    RC rc;
+
+    // Ensure table exists before deleting index.
+    int tableID_tmp;
+    rc = getTableID(tableName, tableID_tmp);
+    if (rc != SUCCESS)
+        return rc;
+
+    // Ensure index on attribute is attribute of table.
+    vector<Attribute> tableAttrs;
+    rc = getAttributes(tableName, tableAttrs);
+    if (rc != SUCCESS)
+        return rc;
+    bool hasTargetAttr = false;
+    for (auto attr : tableAttrs)
+    {
+        if (attr.name.compare(attributeName) == 0)
+        {
+            hasTargetAttr = true;
+            break;
+        }
+    }
+    if (!hasTargetAttr)
+        return RM_ATTR_DOES_NOT_EXIST;
+
+    // Destroy index file.
+    IndexManager* ixm = IndexManager::instance();
+    rc = ixm->destroyFile(getIndexFileName(tableName, attributeName));
+    if (rc != SUCCESS)
+        return rc;
+
+    // Scan the index catalog for entries on table, get attribute name.
+    RM_ScanIterator rmsi;
+
+    uint32_t varcharLength = tableName.length();
+    void *compValue = calloc(sizeof(uint32_t) + varcharLength, sizeof(uint8_t));
+    memcpy(compValue, &varcharLength, sizeof(uint32_t));
+    memcpy((char *) compValue + sizeof(uint32_t), tableName.c_str(), varcharLength);
+
+    vector<string> projectedAttributes { INDEXES_COL_COLUMN_NAME };
+    rc = scan(INDEXES_TABLE_NAME, INDEXES_COL_TABLE_NAME, EQ_OP, compValue, projectedAttributes, rmsi);
+    if (rc != SUCCESS)
+        return rc;
+
+    // For all indexes on table, try to find index on attribute.
+    RID rid; // After this loop, if we found our matching attribute, this will be the RID of that tuple.
+    bool attributeFound = false;
+    void *data = malloc(PAGE_SIZE);
+    while (rmsi.getNextTuple(rid, data) == SUCCESS)
+    {
+        uint8_t SIZEOF_NULL_INDICATOR = 1;
+        uint32_t SIZEOF_VARCHAR_LENGTH = sizeof(uint32_t);
+
+        int tupleLength = * (int *) ((char *) data + SIZEOF_NULL_INDICATOR);
+
+        char tupleString[tupleLength + 1];
+        memcpy(tupleString, (char *) data + SIZEOF_NULL_INDICATOR + SIZEOF_VARCHAR_LENGTH, tupleLength),
+        tupleString[tupleLength] = '\0';
+
+        if (strcmp(tupleString, attributeName.c_str()) == 0)
+        {
+            attributeFound = true;
+            break;
+        }
+    }
+    free(compValue);
+    free(data);
+    rmsi.close();
+    if (!attributeFound)
+        return RM_ATTR_DOES_NOT_EXIST;
+
+    // Delete from index catalog (using RBFM because it's a system table).
+    RecordBasedFileManager *rbfm = RecordBasedFileManager::instance();
+    FileHandle indexCatalogHandle;
+    rc = rbfm->openFile(getFileName(INDEXES_TABLE_NAME), indexCatalogHandle);
+    if (rc != SUCCESS)
+        return rc;
+    rc = rbfm->deleteRecord(indexCatalogHandle, indexDescriptor, rid);
+    if (rc != SUCCESS)
+        return rc;
+    rc = rbfm->closeFile(indexCatalogHandle);
+    if (rc != SUCCESS)
+        return rc;
+
+    return SUCCESS;
 }
 
 RC RelationManager::indexScan(const string &tableName,

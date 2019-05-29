@@ -60,7 +60,9 @@ int TestCreateIndex() {
             break;
         }
     }
+    free(compValue);
     free(data);
+    rmsi.close();
     if (!attributeFound)
     {
         cerr << "***** Finding table & attribute in index catalog failed.  *****" << endl;
@@ -71,21 +73,21 @@ int TestCreateIndex() {
     rc = createIndexforLeftB();
     if (rc == success) {
         cerr << "***** Duplicate createIndexforLeftB() should fail.  *****" << endl;
-        return rc;
+        return -1;
     }
 
     // Try to create index on nonexistent table.  Should fail.
     rc = createIndexforNonexistentTable();
     if (rc == success) {
         cerr << "***** createIndexforNonexistentTable() should fail.  *****" << endl;
-        return rc;
+        return -1;
     }
 
     // Try to create index on existent table but nonexistent attribute.
     rc = createIndexforLeftNonexistentAttribute();
     if (rc == success) {
         cerr << "***** createIndexforLeftNonexistentAttribute() should fail.  *****" << endl;
-        return rc;
+        return -1;
     }
 
     return SUCCESS;

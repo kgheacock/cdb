@@ -661,12 +661,24 @@ int createIndexforNonexistentTable() {
 	return rm->createIndex("QWJIDOJWQIODXASDUIQHWO", "B");
 }
 
+int destroyIndexforNonexistentTable() {
+	return rm->destroyIndex("QWJIDOJWQIODXASDUIQHWO", "B");
+}
+
 int createIndexforLeftNonexistentAttribute() {
+	return rm->createIndex("left", "QWJIDOJWQIODXASDUIQHWO");
+}
+
+int destroyIndexforLeftNonexistentAttribute() {
 	return rm->createIndex("left", "QWJIDOJWQIODXASDUIQHWO");
 }
 
 int createIndexforLeftB() {
 	return rm->createIndex("left", "B");
+}
+
+int destroyIndexforLeftB() {
+	return rm->destroyIndex("left", "B");
 }
 
 int createIndexforLeftC() {
