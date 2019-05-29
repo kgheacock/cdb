@@ -1197,6 +1197,8 @@ int IndexManager::compare(const void *key, const void *value, const Attribute at
         return compare(key_array, value_array);
     }
     }
+    throw "Attribute is malformed";
+    return -2;
 }
 int IndexManager::compare(const int key, const int value) const
 {
