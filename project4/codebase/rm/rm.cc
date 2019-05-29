@@ -702,9 +702,7 @@ RC RelationManager::insertTable(int32_t id, int32_t system, const string &tableN
 
     void *tableData = malloc (TABLES_RECORD_DATA_SIZE);
     prepareTablesRecordData(id, system, tableName, tableData);
-    rc = rbfm->insertRecordOLUMNS_COL_COLUMN_NAME_SIZE 50
-@
-
+    rc = rbfm->insertRecord(fileHandle, tableDescriptor, tableData, rid);
 
     rbfm->closeFile(fileHandle);
     free (tableData);
@@ -724,7 +722,7 @@ RC RelationManager::insertIndex(const string &tableName, const string &attrName)
 
     void *indexData = malloc (INDEXES_RECORD_DATA_SIZE);
     prepareIndexesRecordData(tableName, attrName, indexData);
-    rc = rbfm->(fileHandle, indexDescriptor, indexData, rid);
+    rc = rbfm->insertRecord(fileHandle, indexDescriptor, indexData, rid);
 
     rbfm->closeFile(fileHandle);
     free (indexData);
