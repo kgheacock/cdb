@@ -5,10 +5,11 @@ RC TEST_RM_1(const string &tableName, const int nameLength, const string &name, 
     // Functions tested
     // 1. Insert Tuple **
     // 2. Read Tuple **
-    // NOTE: "**" signifies the new functions being tested in this test case. 
-    cout << endl << "***** In RM Test Case 1 *****" << endl;
-   
-    RID rid; 
+    // NOTE: "**" signifies the new functions being tested in this test case.
+    cout << endl
+         << "***** In RM Test Case 1 *****" << endl;
+
+    RID rid;
     int tupleSize = 0;
     void *tuple = malloc(200);
     void *returnedData = malloc(200);
@@ -19,18 +20,20 @@ RC TEST_RM_1(const string &tableName, const int nameLength, const string &name, 
 
     // Initialize a NULL field indicator
     int nullAttributesIndicatorActualSize = getActualByteForNullsIndicator(attrs.size());
-    unsigned char *nullsIndicator = (unsigned char *) malloc(nullAttributesIndicatorActualSize);
-	memset(nullsIndicator, 0, nullAttributesIndicatorActualSize);
+    unsigned char *nullsIndicator = (unsigned char *)malloc(nullAttributesIndicatorActualSize);
+    memset(nullsIndicator, 0, nullAttributesIndicatorActualSize);
 
     // Insert a tuple into a table
     prepareTuple(attrs.size(), nullsIndicator, nameLength, name, age, height, salary, tuple, &tupleSize);
     cout << "The tuple to be inserted:" << endl;
     rc = rm->printTuple(attrs, tuple);
     cout << endl;
-    
+
     rc = rm->insertTuple(tableName, tuple, rid);
+    if (rc)
+        cerr << "RC: " << rc << endl;
     assert(rc == success && "RelationManager::insertTuple() should not fail.");
-    
+
     // Given the rid, read the tuple from table
     rc = rm->readTuple(tableName, rid, returnedData);
     assert(rc == success && "RelationManager::readTuple() should not fail.");
@@ -40,21 +43,22 @@ RC TEST_RM_1(const string &tableName, const int nameLength, const string &name, 
     cout << endl;
 
     // Compare whether the two memory blocks are the same
-    if(memcmp(tuple, returnedData, tupleSize) == 0)
+    if (memcmp(tuple, returnedData, tupleSize) == 0)
     {
-        cout << "**** RM Test Case 1 finished. The result will be examined. *****" << endl << endl;
+        cout << "**** RM Test Case 1 finished. The result will be examined. *****" << endl
+             << endl;
         free(tuple);
         free(returnedData);
         return success;
     }
     else
     {
-        cout << "**** [FAIL] RM Test Case 1 failed *****" << endl << endl;
+        cout << "**** [FAIL] RM Test Case 1 failed *****" << endl
+             << endl;
         free(tuple);
         free(returnedData);
         return -1;
     }
-
 }
 
 int main()

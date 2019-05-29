@@ -335,10 +335,12 @@ RC RelationManager::getIndexes(const string &tableName, vector<string> &indexes)
     void *indexColumnName = malloc(INDEXES_COL_COLUMN_NAME_SIZE);
     toAPI(tableName, value);
     projection.push_back(INDEXES_COL_COLUMN_NAME);
-    rc = rbfm->openFile(INDEXES_TABLE_NAME, filehandle);
+    rc = rbfm->openFile(getFileName(INDEXES_TABLE_NAME), filehandle);
     if (rc)
         return rc;
     rc = rbfm->scan(filehandle, indexDescriptor, INDEXES_COL_TABLE_NAME, EQ_OP, value, projection, rbfmsi);
+    if (rc)
+        return rc;
     while ((rc = rbfmsi.getNextRecord(rid, indexColumnName)) == SUCCESS)
     {
         string tmp;
@@ -350,7 +352,7 @@ RC RelationManager::getIndexes(const string &tableName, vector<string> &indexes)
         return rc;
     rbfmsi.close();
     rbfm->closeFile(filehandle);
-    return rc;
+    return SUCCESS;
 }
 RC RelationManager::insertTuple(const string &tableName, const void *data, RID &rid)
 {
