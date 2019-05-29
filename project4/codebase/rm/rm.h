@@ -118,7 +118,7 @@ public:
   RC deleteTable(const string &tableName);
 
   RC getAttributes(const string &tableName, vector<Attribute> &attrs);
-  RC getIndexes(const string &tableName, vector<Attribute> &indexes);
+  RC getIndexes(const string &tableName, vector<string> &indexes);
 
   RC insertTuple(const string &tableName, const void *data, RID &rid);
 

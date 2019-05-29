@@ -188,7 +188,7 @@ RC RelationManager::deleteTable(const string &tableName)
     rbfm->closeFile(fileHandle);
     rbfm_si.close();
 
-    void *value = malloc(TABLES_COL_TABLE_NAME_SIZE);
+    value = malloc(TABLES_COL_TABLE_NAME_SIZE);
     void *columnIndexFileName = malloc(INDEXES_COL_FILE_NAME_SIZE);
     toAPI(tableName, value);
 
@@ -211,6 +211,8 @@ RC RelationManager::deleteTable(const string &tableName)
             return rc;
         memset(columnIndexFileName, 0, INDEXES_COL_COLUMN_NAME_SIZE);
     }
+    free(columnIndexFileName);
+    free(value);
     if (rc != RBFM_EOF)
         return rc;
     rbfm->closeFile(fileHandle);
@@ -768,10 +770,8 @@ RC RelationManager::insertTable(int32_t id, int32_t system, const string &tableN
 
     void *tableData = malloc(TABLES_RECORD_DATA_SIZE);
     prepareTablesRecordData(id, system, tableName, tableData);
-    rc = rbfm->insertRecordOLUMNS_COL_COLUMN_NAME_SIZE 50
-         @
-
-         rbfm->closeFile(fileHandle);
+    rc = rbfm->insertRecord(fileHandle, tableDescriptor, tableData, rid);
+    rbfm->closeFile(fileHandle);
     free(tableData);
     return rc;
 }
@@ -789,7 +789,7 @@ RC RelationManager::insertIndex(const string &tableName, const string &attrName)
 
     void *indexData = malloc(INDEXES_RECORD_DATA_SIZE);
     prepareIndexesRecordData(tableName, attrName, indexData);
-    rc = rbfm->(fileHandle, indexDescriptor, indexData, rid);
+    rc = rbfm->insertRecord(fileHandle, indexDescriptor, indexData, rid);
 
     rbfm->closeFile(fileHandle);
     free(indexData);
