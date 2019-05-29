@@ -28,7 +28,7 @@ RC TEST_RM_14(const string &tableName)
     // Set up the iterator
     RM_ScanIterator rmsi;
     vector<string> projected_attrs;
-    for (int i = 0; i < attrs.size(); i++){
+    for (unsigned int i = 0; i < attrs.size(); i++){
       projected_attrs.push_back(attrs[i].name);
     }
 

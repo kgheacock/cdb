@@ -10,12 +10,11 @@ RelationManager* RelationManager::instance()
 {
     if(!_rm)
         _rm = new RelationManager();
-
     return _rm;
 }
 
 RelationManager::RelationManager()
-: tableDescriptor(createTableDescriptor()), columnDescriptor(createColumnDescriptor())
+: tableDescriptor(createTableDescriptor()), columnDescriptor(createColumnDescriptor()), indexDescriptor(createIndexDescriptor())
 {
 }
 
@@ -437,6 +436,16 @@ RC RelationManager::readAttribute(const string &tableName, const RID &rid, const
     rc = rbfm->readAttribute(fileHandle, recordDescriptor, rid, attributeName, data);
     rbfm->closeFile(fileHandle);
     return rc;
+}
+
+string RelationManager::getIndexFileName(const char *tableName, const char *attributeName)
+{
+    return string(tableName) + '.' + string(attributeName) + string(INDEX_FILE_EXTENSION);
+}
+
+string RelationManager::getIndexFileName(const string &tableName, const string &attributeName)
+{
+    return tableName + '.' + attributeName + string(INDEX_FILE_EXTENSION);
 }
 
 string RelationManager::getFileName(const char *tableName)
@@ -940,7 +949,46 @@ RC RM_ScanIterator::getNextTuple(RID &rid, void *data)
 
 RC RelationManager::createIndex(const string &tableName, const string &attributeName)
 {
-    return -1;
+    RC rc;
+
+    // Ensure table exists before creating index.
+    int tableID_tmp;
+    rc = getTableID(tableName, tableID_tmp);
+    if (rc != SUCCESS)
+        return rc;
+
+    // Ensure index on attribute is attribute of table.
+    vector<Attribute> tableAttrs;
+    rc = getAttributes(tableName, tableAttrs);
+    if (rc != SUCCESS)
+        return rc;
+    bool hasTargetAttr = false;
+    for (auto attr : tableAttrs)
+    {
+        if (attr.name.compare(attributeName) == 0)
+        {
+            hasTargetAttr = true;
+            break;
+        }
+    }
+    if (!hasTargetAttr)
+        return RM_ATTR_DOES_NOT_EXIST;
+
+    // Create index file.
+    IndexManager* ixm = IndexManager::instance();
+    rc = ixm->createFile(getIndexFileName(tableName, attributeName));
+    if (rc != SUCCESS) // This also fails when index file already exists.
+        return rc;
+
+    // Insert into index catalog.
+    rc = insertIndex(tableName, attributeName);
+    if (rc != SUCCESS)
+    {
+        ixm->destroyFile(getIndexFileName(tableName, attributeName)); // Try to cleanup index file from before.
+        return rc;
+    }
+
+    return SUCCESS;
 }
 
 RC RelationManager::destroyIndex(const string &tableName, const string &attributeName)

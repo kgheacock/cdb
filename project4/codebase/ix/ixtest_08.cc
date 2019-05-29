@@ -77,7 +77,7 @@ int testCase_8(const string &indexFileName, const Attribute &attribute)
         if (rid.pageNum % 100 == 0) {
             cerr << count << " - Returned rid: " << rid.pageNum << " " << rid.slotNum << endl;
         }
-        if (rid.pageNum < value || rid.slotNum < value + 1)
+        if (rid.pageNum < (unsigned) value || rid.slotNum < (unsigned) value + 1)
         {
             cerr << "Wrong entries output... The test failed" << endl;
             rc = ix_ScanIterator.close();

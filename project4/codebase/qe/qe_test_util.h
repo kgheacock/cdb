@@ -657,6 +657,14 @@ clean_up:
 	return rc;
 }
 
+int createIndexforNonexistentTable() {
+	return rm->createIndex("QWJIDOJWQIODXASDUIQHWO", "B");
+}
+
+int createIndexforLeftNonexistentAttribute() {
+	return rm->createIndex("left", "QWJIDOJWQIODXASDUIQHWO");
+}
+
 int createIndexforLeftB() {
 	return rm->createIndex("left", "B");
 }

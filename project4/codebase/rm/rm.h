@@ -6,10 +6,12 @@
 #include <vector>
 
 #include "../rbf/rbfm.h"
+#include "../ix/ix.h"
 
 using namespace std;
 
 #define TABLE_FILE_EXTENSION ".t"
+#define INDEX_FILE_EXTENSION ".idx"
 
 #define TABLES_TABLE_NAME           "Tables"
 #define TABLES_TABLE_ID             1
@@ -57,8 +59,9 @@ using namespace std;
 
 # define RM_EOF (-1)  // end of a scan operator
 
-#define RM_CANNOT_MOD_SYS_TBL 1
-#define RM_NULL_COLUMN        2
+#define RM_CANNOT_MOD_SYS_TBL  1
+#define RM_NULL_COLUMN         2
+#define RM_ATTR_DOES_NOT_EXIST 3
 
 typedef struct IndexedAttr
 {
@@ -145,6 +148,14 @@ public:
                         bool highKeyInclusive,
                         RM_IndexScanIterator &rm_IndexScanIterator);
 
+  // Convert tableName to index file name (append extension).
+  static string getIndexFileName(const char *tableName, const char *attributeName);
+  static string getIndexFileName(const string &tableName, const string &attributeName);
+
+  // Convert tableName to file name (append extension)
+  static string getFileName(const char *tableName);
+  static string getFileName(const string &tableName);
+
 protected:
   RelationManager();
   ~RelationManager();
@@ -154,10 +165,6 @@ private:
   const vector<Attribute> tableDescriptor;
   const vector<Attribute> columnDescriptor;
   const vector<Attribute> indexDescriptor;
-
-  // Convert tableName to file name (append extension)
-  static string getFileName(const char *tableName);
-  static string getFileName(const string &tableName);
 
   // Create recordDescriptor for Table/Column/Index tables
   static vector<Attribute> createTableDescriptor();
