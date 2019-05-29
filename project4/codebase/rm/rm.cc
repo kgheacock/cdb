@@ -321,6 +321,25 @@ RC RelationManager::insertTuple(const string &tableName, const void *data, RID &
     rc = rbfm->insertRecord(fileHandle, recordDescriptor, data, rid);
     rbfm->closeFile(fileHandle);
 
+    // Insert corresponding record into the index
+    IndexManager *im = IndexManager::instance();
+    IXFileHandle *ixFileHandle;
+    
+    // Iterate over attributes in recordDescriptor  
+    void *value;  // This is malloc'd in RBFM static function
+    for (Attribute attr: recordDescriptor)
+    {           
+        /* 
+        if (isInIndex(attr)) // need to implement this function
+        {           
+            RecordBasedFileManager::getColumnFromTuple(data, recordDescriptor, attr, value);
+            rc = im->insertEntry(ixFileHandle, attr, value, rid);
+            free(value);
+        }
+        if (rc)
+            return rc;
+        */
+    }
     return rc;
 }
 
@@ -683,7 +702,9 @@ RC RelationManager::insertTable(int32_t id, int32_t system, const string &tableN
 
     void *tableData = malloc (TABLES_RECORD_DATA_SIZE);
     prepareTablesRecordData(id, system, tableName, tableData);
-    rc = rbfm->insertRecord(fileHandle, tableDescriptor, tableData, rid);
+    rc = rbfm->insertRecordOLUMNS_COL_COLUMN_NAME_SIZE 50
+@
+
 
     rbfm->closeFile(fileHandle);
     free (tableData);
@@ -703,7 +724,7 @@ RC RelationManager::insertIndex(const string &tableName, const string &attrName)
 
     void *indexData = malloc (INDEXES_RECORD_DATA_SIZE);
     prepareIndexesRecordData(tableName, attrName, indexData);
-    rc = rbfm->insertRecord(fileHandle, indexDescriptor, indexData, rid);
+    rc = rbfm->(fileHandle, indexDescriptor, indexData, rid);
 
     rbfm->closeFile(fileHandle);
     free (indexData);
