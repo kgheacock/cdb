@@ -437,10 +437,42 @@ RC RelationManager::deleteTuple(const string &tableName, const RID &rid)
     rc = rbfm->openFile(getFileName(tableName), fileHandle);
     if (rc)
         return rc;
+    void *data = malloc(PAGE_SIZE);
+    rc = rbfm->readRecord(fileHandle, recordDescriptor, rid, data);
+    if (rc)
+        return rc;
 
+    IXFileHandle ixFileHandle;
+    vector<string> columnsWithIndexes;
+    rc = getIndexes(tableName, columnsWithIndexes);
+    if (rc)
+        return rc;
+    IndexManager *im = IndexManager::instance();
+    // Iterate over attributes in recordDescriptor
+    void *value; // This is malloc'd in getColumnFromTuple()
+    for (Attribute attr : recordDescriptor)
+    {
+        if (std::find(columnsWithIndexes.begin(), columnsWithIndexes.end(), attr.name) != columnsWithIndexes.end())
+        {
+            rc = im->openFile(getIndexFileName(tableName, attr.name), ixFileHandle);
+            if (rc)
+                return rc;
+            rc = RecordBasedFileManager::getColumnFromTuple(data, recordDescriptor, attr, value);
+            if (rc)
+                return rc;
+            rc = im->deleteEntry(ixFileHandle, attr, value, rid);
+            if (rc)
+                return rc;
+            free(value);
+            im->closeFile(ixFileHandle);
+        }
+    }
+    free(data);
     // Let rbfm do all the work
     rc = rbfm->deleteRecord(fileHandle, recordDescriptor, rid);
-    rbfm->closeFile(fileHandle);
+    if (rc)
+        return rc;
+    rc = rbfm->closeFile(fileHandle);
 
     return rc;
 }
