@@ -501,6 +501,42 @@ RC RelationManager::updateTuple(const string &tableName, const void *data, const
     rc = rbfm->openFile(getFileName(tableName), fileHandle);
     if (rc)
         return rc;
+    void *currentData = malloc(PAGE_SIZE);
+    rc = rbfm->readRecord(fileHandle, recordDescriptor, rid, currentData);
+    if (rc)
+        return rc;
+
+    IXFileHandle ixFileHandle;
+    vector<string> columnsWithIndexes;
+    rc = getIndexes(tableName, columnsWithIndexes);
+    if (rc)
+        return rc;
+    IndexManager *im = IndexManager::instance();
+    // Iterate over attributes in recordDescriptor
+    void *value; // This is malloc'd in getColumnFromTuple()
+    for (Attribute attr : recordDescriptor)
+    {
+        if (std::find(columnsWithIndexes.begin(), columnsWithIndexes.end(), attr.name) != columnsWithIndexes.end())
+        {
+            rc = im->openFile(getIndexFileName(tableName, attr.name), ixFileHandle);
+            if (rc)
+                return rc;
+            rc = RecordBasedFileManager::getColumnFromTuple(currentData, recordDescriptor, attr, value);
+            if (rc)
+                return rc;
+            rc = im->deleteEntry(ixFileHandle, attr, value, rid);
+            free(value);
+            rc = RecordBasedFileManager::getColumnFromTuple(data, recordDescriptor, attr, value);
+            if (rc)
+                return rc;
+            rc = im->insertEntry(ixFileHandle, attr, value, rid);
+            free(value);
+            if (rc)
+                return rc;
+            im->closeFile(ixFileHandle);
+        }
+    }
+    free(currentData);
 
     // Let rbfm do all the work
     rc = rbfm->updateRecord(fileHandle, recordDescriptor, data, rid);
