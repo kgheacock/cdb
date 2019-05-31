@@ -6,8 +6,9 @@
 #include "../rbf/rbfm.h"
 #include "../rm/rm.h"
 #include "../ix/ix.h"
-
-#define QE_EOF (-1) // end of the index scan
+#define QE_EOF (-1)  // end of the index scan
+#define QE_NO_SUCH_ATTR (-2)
+#define QE_MISMATCHED_ATTR_TYPES (-3)
 
 using namespace std;
 
@@ -205,15 +206,18 @@ public:
 class Filter : public Iterator
 {
     // Filter operator
-public:
-    Filter(Iterator *input,           // Iterator of input R
-           const Condition &condition // Selection condition
-    );
-    ~Filter(){};
+    public:
+        Filter(Iterator *input,               // Iterator of input R
+               const Condition &condition     // Selection condition
+        ) : iter_ {input}, cond_ {condition} {};
+        ~Filter();
 
-    RC getNextTuple(void *data) { return QE_EOF; };
-    // For attribute in vector<Attribute>, name it as rel.attr
-    void getAttributes(vector<Attribute> &attrs) const {};
+        RC getNextTuple(void *data);
+        // For attribute in vector<Attribute>, name it as rel.attr
+        void getAttributes(vector<Attribute> &attrs) const;
+    private:
+        Iterator *iter_;
+        const Condition cond_;
 };
 
 class Project : public Iterator
