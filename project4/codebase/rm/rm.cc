@@ -331,9 +331,13 @@ RC RelationManager::getIndexes(const string &tableName, vector<string> &indexes)
     vector<string> projection;
     RBFM_ScanIterator rbfmsi;
     RID rid;
-    void *value = malloc(INDEXES_COL_TABLE_NAME_SIZE);
-    void *indexColumnName = malloc(INDEXES_COL_COLUMN_NAME_SIZE);
-    toAPI(tableName, value);
+
+    void *value = malloc(sizeof(uint32_t) + tableName.length());
+    * (int *) value = tableName.length();
+    memcpy((char *) value + sizeof(uint32_t), tableName.c_str(), tableName.length());
+
+    void *indexColumnName = malloc(PAGE_SIZE);
+    //toAPI(tableName, value);
     projection.push_back(INDEXES_COL_COLUMN_NAME);
     rc = rbfm->openFile(getFileName(INDEXES_TABLE_NAME), filehandle);
     if (rc)
@@ -350,6 +354,7 @@ RC RelationManager::getIndexes(const string &tableName, vector<string> &indexes)
     }
     if (rc != RBFM_EOF)
         return rc;
+    //rmsi.close();
     rbfmsi.close();
     rbfm->closeFile(filehandle);
     return SUCCESS;
