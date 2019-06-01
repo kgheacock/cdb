@@ -85,6 +85,8 @@ bool Value::compare(const Value *rhs, const CompOp op)
         return result >= 0;
     case EQ_OP:
         return result == 0;
+    case NE_OP:
+        return result != 0;
     case NO_OP:
         return true;
     default:
