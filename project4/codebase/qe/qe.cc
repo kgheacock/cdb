@@ -1,6 +1,7 @@
 
 #include "qe.h"
 #include <string.h>
+#include <algorithm>
 Filter::Filter(Iterator *input, const Condition &condition)
 {
 }
@@ -91,8 +92,57 @@ bool Value::compare(const Value *rhs, const CompOp op)
     case EQ_OP:
         return result == 0;
         break;
+    case NE_OP:
+        return result != 0;
+        break;
+    case NO_OP:
+        return false;
+        break;
     }
     throw "Comparison Operator is invalid";
     return false;
 }
+/* IN PROGRESS
+RC INLJoin::getNextTuple(void *data)
+{
+    RC rcRight;
+    void *leftTuple = malloc(PAGE_SIZE);
+    RC rcLeft = left->getNextTuple(leftTuple);
+    void *rightTuple = malloc(PAGE_SIZE);
+    void *leftValueData;
+    Value leftValue;
+    leftValue.type = joinAttr.type;
+    Value rightValue;
+    rightValue.type = joinAttr.type;
+    while (rcLeft == SUCCESS)
+    {
+        RecordBasedFileManager::getColumnFromTuple(leftTuple, leftDescriptor, condition.lhsAttr, leftValue.data);
+
+        //Do we already have an iterator
+        if (Value::compare(right->key, leftValue.data, joinAttr.type) != 0)
+            right->setIterator(leftValue.data, leftValue.data, true, true);
+        rcRight = right->getNextTuple(rightTuple);
+        //leftValue is not present in the right table
+        if (rcRight == IX_EOF)
+        {
+            free(leftValue.data);
+            memset(leftTuple, 0, PAGE_SIZE);
+            memset(rightTuple, 0, PAGE_SIZE);
+            rcLeft = left->getNextTuple(leftTuple);
+            continue;
+        }
+        //leftValue = rightValue{
+        else
+        {
+            concat(leftTuple, rightTuple, data);
+            free(leftTuple);
+            free(rightTuple);
+            free(leftValue.data);
+            return SUCCESS;
+        }
+    }
+    if (rcLeft == IX_EOF)
+        return rcLeft;
+}
+*/
 // ... the rest of your implementations go here

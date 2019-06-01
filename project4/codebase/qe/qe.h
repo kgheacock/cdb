@@ -31,10 +31,10 @@ struct Value
     void *data;    // value
     int compare(const Value *rhs);
     bool compare(const Value *rhs, const CompOp op);
-    int compare(const void *key, const void *value, const AttrType attrType);
-    int compare(const int key, const int value);
-    int compare(const float key, const float value);
-    int compare(const char *key, const char *value);
+    static int compare(const void *key, const void *value, const AttrType attrType);
+    static int compare(const int key, const int value);
+    static int compare(const float key, const float value);
+    static int compare(const char *key, const char *value);
 };
 
 struct Condition
@@ -236,12 +236,33 @@ public:
     INLJoin(Iterator *leftIn,          // Iterator of input R
             IndexScan *rightIn,        // IndexScan Iterator of input S
             const Condition &condition // Join condition
-    ){};
+            ) : left(leftIn), right(rightIn), condition(condition)
+    {
+        left->getAttributes(leftDescriptor);
+        right->getAttributes(rightDescriptor);
+        for (Attribute attr : leftDescriptor)
+        {
+            if (attr.name.compare(condition.lhsAttr) == 0)
+            {
+                joinAttr = attr;
+                return;
+            }
+        }
+        throw "Join attribute not found in record descriptor";
+    };
     ~INLJoin(){};
-
-    RC getNextTuple(void *data) { return QE_EOF; };
+    void concat(const void *lhs, const void *rhs, void *out);
+    RC getNextTuple(void *data);
     // For attribute in vector<Attribute>, name it as rel.attr
     void getAttributes(vector<Attribute> &attrs) const {};
+
+    Iterator *left;
+    IndexScan *right;
+    void *previousLeft;
+    vector<Attribute> leftDescriptor;
+    vector<Attribute> rightDescriptor;
+    Attribute joinAttr;
+    const Condition condition;
 };
 
 #endif
