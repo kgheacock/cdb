@@ -146,3 +146,71 @@ RC INLJoin::getNextTuple(void *data)
 }
 */
 // ... the rest of your implementations go here
+
+RC Filter::getNextTuple(void *data)
+{
+    // get tuple from iterator.
+    // check condition from tuple.
+    // fill in data.
+    void *iter_tuple = calloc(PAGE_SIZE, sizeof(uint8_t));
+    while (iter_.getNextTuple(iter_tuple) != QE_EOF) {
+        if (evalPredicate(iter_tuple, cond_, cond_.rhsValue.data, )
+    }
+
+    return QE_EOF;
+}
+
+void Filter::getAttributes(vector<Attribute> &attrs) const
+{
+
+}
+
+bool evalPredicate(const void *leftTuple, const Condition condition, const void *rightTuple,
+                   const vector<Attribute> leftAttrs,
+                   const vector<Attribute> rightAttrs)
+{
+    RC rc;
+
+    Attribute leftAttr = std::find_if(leftAttrs.begin(),
+                                      leftAttrs.end(),
+                                      [condition.lhsAttr](const Attribute &a) { return a.name.compare(condition.lhsAttr) == 0; });
+    if (leftAttr == leftAttrs.end())
+        return QE_NO_SUCH_ATTR;
+
+    void *leftKey;
+    rc = RecordBasedFileManager::getColumnFromTuple(leftTuple, leftAttrs, leftAttr, leftKey);
+    if (rc != SUCCESS)
+        return rc;
+
+    void *rightKey;
+    if (condition.bRhsIsAttr)
+    {
+        Attribute rightAttr = std::find_if(rightAttrs.begin(),
+                                           rightAttrs.end(),
+                                           [condition.rhsAttr](const Attribute &a) { return a.name.compare(condition.rhsAttr) == 0; });
+        if (rightAttr == rightAttrs.end())
+        {
+            free(leftKey);
+            return QE_NO_SUCH_ATTR;
+        }
+        else if (rightAttr.type != leftAttr.type)
+        {
+            free(leftKey);
+            return QE_MISMATCHED_ATTR_TYPES;
+        }
+
+        rc = RecordBasedFileManager::getColumnFromTuple(rightTuple, rightAttrs, rightAttr, rightKey);
+        if (rc != SUCCESS)
+        {
+            free(leftKey);
+            return rc;
+        }
+    }
+    else
+    {
+        rightKey = condition.rhsValue;
+    }
+    
+    // Compare left & right.
+    // TODO: use RHS as Value not pointer.
+}

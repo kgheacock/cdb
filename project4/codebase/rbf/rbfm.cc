@@ -226,7 +226,7 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
     free(pageData);
     return rc;
 }
-RC RecordBasedFileManager::getColumnFromTuple(const void *tuple, const vector<Attribute> recordDescriptor, Attribute attr, void *&value)
+RC RecordBasedFileManager::getColumnFromTuple(const void *tuple, const vector<Attribute> recordDescriptor, const string attrName, void *&value)
 {
     int offset = getNullIndicatorSize(recordDescriptor.size());
     char nullIndicator[offset];
@@ -236,7 +236,7 @@ RC RecordBasedFileManager::getColumnFromTuple(const void *tuple, const vector<At
     bool isNull = false;
     for (auto _attr = recordDescriptor.begin(); _attr != recordDescriptor.end(); ++_attr)
     {
-        isTargetValue = _attr->name.compare(attr.name) == 0;
+        isTargetValue = _attr->name.compare(attrName) == 0;
         isNull = fieldIsNull(nullIndicator, 1);
         if (isNull && isTargetValue)
             return RBFM_READ_FAILED;

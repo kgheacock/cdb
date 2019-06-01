@@ -400,7 +400,7 @@ RC RelationManager::insertTuple(const string &tableName, const void *data, RID &
             rc = im->openFile(getIndexFileName(tableName, attr.name), ixFileHandle);
             if (rc)
                 return rc;
-            rc = RecordBasedFileManager::getColumnFromTuple(data, recordDescriptor, attr, value);
+            rc = RecordBasedFileManager::getColumnFromTuple(data, recordDescriptor, attr.name, value);
             if (rc)
                 return rc;
             rc = im->insertEntry(ixFileHandle, attr, value, rid);
@@ -457,7 +457,7 @@ RC RelationManager::deleteTuple(const string &tableName, const RID &rid)
             rc = im->openFile(getIndexFileName(tableName, attr.name), ixFileHandle);
             if (rc)
                 return rc;
-            rc = RecordBasedFileManager::getColumnFromTuple(data, recordDescriptor, attr, value);
+            rc = RecordBasedFileManager::getColumnFromTuple(data, recordDescriptor, attr.name, value);
             if (rc)
                 return rc;
             rc = im->deleteEntry(ixFileHandle, attr, value, rid);
@@ -521,12 +521,12 @@ RC RelationManager::updateTuple(const string &tableName, const void *data, const
             rc = im->openFile(getIndexFileName(tableName, attr.name), ixFileHandle);
             if (rc)
                 return rc;
-            rc = RecordBasedFileManager::getColumnFromTuple(currentData, recordDescriptor, attr, value);
+            rc = RecordBasedFileManager::getColumnFromTuple(currentData, recordDescriptor, attr.name, value);
             if (rc)
                 return rc;
             rc = im->deleteEntry(ixFileHandle, attr, value, rid);
             free(value);
-            rc = RecordBasedFileManager::getColumnFromTuple(data, recordDescriptor, attr, value);
+            rc = RecordBasedFileManager::getColumnFromTuple(data, recordDescriptor, attr.name, value);
             if (rc)
                 return rc;
             rc = im->insertEntry(ixFileHandle, attr, value, rid);
