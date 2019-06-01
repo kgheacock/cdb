@@ -109,6 +109,8 @@ class RelationManager
 public:
   static RelationManager *instance();
 
+  unsigned getTupleSize(const vector<Attribute> &attrs, const void *data);
+
   RC createCatalog();
 
   RC deleteCatalog();

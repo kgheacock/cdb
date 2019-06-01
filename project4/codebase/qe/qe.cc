@@ -1,9 +1,8 @@
 
 #include "qe.h"
 #include <string.h>
-Filter::Filter(Iterator *input, const Condition &condition)
-{
-}
+#include <algorithm>
+
 int Value::compare(const int key, const int value)
 {
     if (key == value)
@@ -78,21 +77,117 @@ bool Value::compare(const Value *rhs, const CompOp op)
     {
     case LT_OP:
         return result == -1;
-        break;
     case GT_OP:
         return result == 1;
-        break;
     case LE_OP:
         return result <= 0;
-        break;
     case GE_OP:
         return result >= 0;
-        break;
     case EQ_OP:
         return result == 0;
-        break;
+    case NO_OP:
+        return true;
+    default:
+        throw "Comparison Operator is invalid";
+        return false;
     }
-    throw "Comparison Operator is invalid";
-    return false;
 }
 // ... the rest of your implementations go here
+RC Filter::getNextTuple(void *data)
+{
+    vector<Attribute> attrs;
+    iter_->getAttributes(attrs);
+
+    void *iter_tuple = calloc(PAGE_SIZE, sizeof(uint8_t));
+    if (iter_tuple == nullptr)
+        return -1;
+
+    while (iter_->getNextTuple(iter_tuple) != QE_EOF) {
+
+        /* For simplified Filter, we only compare with:
+         *   - the tuple we just got, or
+         *   - some predefined value in condition.
+         */
+        bool result;
+        auto rc = evalPredicate(result, iter_tuple, cond_, iter_tuple, attrs, attrs);
+        if (rc != SUCCESS)
+        {
+            free(iter_tuple);
+            return rc;
+        }
+
+        if (result)
+        {
+            RelationManager *rm = RelationManager::instance();
+            memcpy(data, iter_tuple, rm->getTupleSize(attrs, iter_tuple));
+            free(iter_tuple);
+            return SUCCESS;
+        }
+    }
+
+    free(iter_tuple);
+    return QE_EOF;
+}
+
+void Filter::getAttributes(vector<Attribute> &attrs) const
+{
+    iter_->getAttributes(attrs);
+}
+
+RC evalPredicate(bool &result,
+                 const void *leftTuple, const Condition condition, const void *rightTuple,
+                 const vector<Attribute> leftAttrs,
+                 const vector<Attribute> rightAttrs)
+{
+    RC rc;
+
+    // Get leftValue.
+    auto matchingAttrName_left = [condition](Attribute a) { return a.name == condition.lhsAttr; };
+    auto iterPos_left = find_if(leftAttrs.begin(), leftAttrs.end(), matchingAttrName_left);
+    unsigned index_left = distance(leftAttrs.begin(), iterPos_left);
+    if (index_left == leftAttrs.size())
+        return QE_NO_SUCH_ATTR;
+    const Attribute leftAttr = leftAttrs[index_left];
+
+    void *leftKey;
+    rc = RecordBasedFileManager::getColumnFromTuple(leftTuple, leftAttrs, leftAttr, leftKey);
+    if (rc != SUCCESS)
+        return rc;
+
+    Value leftValue = { leftAttr.type, leftKey };
+
+    // Get rightValue.
+    Value rightValue;
+    void *rightKey = nullptr;
+    if (condition.bRhsIsAttr)
+    {
+        auto matchingAttrName_right = [condition](Attribute a) { return a.name == condition.rhsAttr; };
+        auto iterPos_right = find_if(rightAttrs.begin(), rightAttrs.end(), matchingAttrName_right);
+        unsigned index_right = distance(rightAttrs.begin(), iterPos_right);
+        if (index_right == rightAttrs.size())
+            return QE_NO_SUCH_ATTR;
+        const Attribute rightAttr = rightAttrs[index_right];
+
+        rc = RecordBasedFileManager::getColumnFromTuple(rightTuple, rightAttrs, rightAttr, rightKey);
+        if (rc != SUCCESS)
+        {
+            free(leftKey);
+            return rc;
+        }
+
+        rightValue = { rightAttr.type, rightKey };
+    }
+    else
+    {
+        rightValue = condition.rhsValue;
+    }
+    
+    result = leftValue.compare(&rightValue, condition.op);
+
+    free(leftKey);
+    if (rightKey != nullptr)
+        free(rightKey);
+
+    return SUCCESS;
+}
+

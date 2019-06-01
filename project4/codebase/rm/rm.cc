@@ -575,6 +575,12 @@ RC RelationManager::printTuple(const vector<Attribute> &attrs, const void *data)
     return rbfm->printRecord(attrs, data);
 }
 
+unsigned RelationManager::getTupleSize(const vector<Attribute> &attrs, const void *data)
+{
+    RecordBasedFileManager *rbfm = RecordBasedFileManager::instance();
+    return rbfm->getRecordSize(attrs, data);
+}
+
 RC RelationManager::readAttribute(const string &tableName, const RID &rid, const string &attributeName, void *data)
 {
     RecordBasedFileManager *rbfm = RecordBasedFileManager::instance();
@@ -1273,18 +1279,22 @@ RC RelationManager::indexScan(const string &tableName,
 
     IndexManager *ixm = IndexManager::instance();
 
-    IXFileHandle ixfileHandle;
-    rc = ixm->openFile(getIndexFileName(tableName, attributeName), ixfileHandle);
+    rc = ixm->openFile(getIndexFileName(tableName, attributeName), rm_IndexScanIterator.indexFileHandle);
     if (rc != SUCCESS)
         return rc;
 
-    IX_ScanIterator ixsi;
-    rc = ixm->scan(ixfileHandle, targetAttr, lowKey, highKey, lowKeyInclusive, highKeyInclusive, ixsi);
+    rc = ixm->scan(
+        rm_IndexScanIterator.indexFileHandle,
+        targetAttr,
+        lowKey,
+        highKey,
+        lowKeyInclusive,
+        highKeyInclusive,
+        rm_IndexScanIterator.indexScanIterator
+    );
     if (rc != SUCCESS)
         return rc;
 
-    rm_IndexScanIterator.indexFileHandle = ixfileHandle;
-    rm_IndexScanIterator.indexScanIterator = ixsi;
     rm_IndexScanIterator.closed = false;
 
     return SUCCESS;
