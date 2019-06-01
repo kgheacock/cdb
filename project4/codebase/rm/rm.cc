@@ -341,10 +341,18 @@ RC RelationManager::getIndexes(const string &tableName, vector<string> &indexes)
     projection.push_back(INDEXES_COL_COLUMN_NAME);
     rc = rbfm->openFile(getFileName(INDEXES_TABLE_NAME), filehandle);
     if (rc)
+    {
+        free(indexColumnName);
+        free(value);
         return rc;
+    }
     rc = rbfm->scan(filehandle, indexDescriptor, INDEXES_COL_TABLE_NAME, EQ_OP, value, projection, rbfmsi);
     if (rc)
+    {
+        free(indexColumnName);
+        free(value);
         return rc;
+    }
     while ((rc = rbfmsi.getNextRecord(rid, indexColumnName)) == SUCCESS)
     {
         string tmp;
@@ -352,6 +360,8 @@ RC RelationManager::getIndexes(const string &tableName, vector<string> &indexes)
         indexes.push_back(tmp);
         memset(indexColumnName, 0, INDEXES_COL_COLUMN_NAME_SIZE);
     }
+    free(indexColumnName);
+    free(value);
     if (rc != RBFM_EOF)
         return rc;
     //rmsi.close();
