@@ -425,6 +425,7 @@ int populateLeftTable() {
 	}
 
 clean_up:
+    free(nullsIndicator);
 	free(buf);
 	return rc;
 }
@@ -499,6 +500,7 @@ int populateRightTable() {
 	}
 
 clean_up:
+    free(nullsIndicator);
 	free(buf);
 	return rc;
 }
