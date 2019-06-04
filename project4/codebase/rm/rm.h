@@ -166,15 +166,16 @@ public:
   static string getFileName(const char *tableName);
   static string getFileName(const string &tableName);
 
+  const vector<Attribute> tableDescriptor;
+  const vector<Attribute> columnDescriptor;
+  const vector<Attribute> indexDescriptor;
+
 protected:
   RelationManager();
   ~RelationManager();
 
 private:
   static RelationManager *_rm;
-  const vector<Attribute> tableDescriptor;
-  const vector<Attribute> columnDescriptor;
-  const vector<Attribute> indexDescriptor;
 
   // Create recordDescriptor for Table/Column/Index tables
   static vector<Attribute> createTableDescriptor();

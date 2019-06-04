@@ -1156,16 +1156,21 @@ void RecordBasedFileManager::reorganizePage(void *page)
 void RecordBasedFileManager::getAttributeFromRecord(void *page, unsigned offset, unsigned attrIndex, AttrType type, void *data)
 {
     char *start = (char *)page + offset;
+    getAttributeFromRecord(start, attrIndex, type, data);
+}
+
+void RecordBasedFileManager::getAttributeFromRecord(void *record, unsigned attrIndex, AttrType type, void *data)
+{
     unsigned data_offset = 0;
 
     // Get number of columns
     RecordLength n;
-    memcpy(&n, start, sizeof(RecordLength));
+    memcpy(&n, record, sizeof(RecordLength));
 
     // Get null indicator
     int recordNullIndicatorSize = getNullIndicatorSize(n);
     char recordNullIndicator[recordNullIndicatorSize];
-    memcpy(recordNullIndicator, start + sizeof(RecordLength), recordNullIndicatorSize);
+    memcpy(recordNullIndicator, (char *) record + sizeof(RecordLength), recordNullIndicatorSize);
 
     // Set null indicator for result
     char resultNullIndicator = 0;
@@ -1182,11 +1187,11 @@ void RecordBasedFileManager::getAttributeFromRecord(void *page, unsigned offset,
     // Our directory at the beginning of each record contains pointers to the ends of each attribute,
     // so we can pull attrEnd from that
     ColumnOffset attrEnd, attrStart;
-    memcpy(&attrEnd, start + header_offset + attrIndex * sizeof(ColumnOffset), sizeof(ColumnOffset));
+    memcpy(&attrEnd, (char *) record + header_offset + attrIndex * sizeof(ColumnOffset), sizeof(ColumnOffset));
     // The start is either the end of the previous attribute, or the start of the data section of the
     // record if we are after the 0th attribute
     if (attrIndex > 0)
-        memcpy(&attrStart, start + header_offset + (attrIndex - 1) * sizeof(ColumnOffset), sizeof(ColumnOffset));
+        memcpy(&attrStart, (char *) record + header_offset + (attrIndex - 1) * sizeof(ColumnOffset), sizeof(ColumnOffset));
     else
         attrStart = header_offset + n * sizeof(ColumnOffset);
     // The length of any attribute is just the difference between its start and end
@@ -1198,5 +1203,6 @@ void RecordBasedFileManager::getAttributeFromRecord(void *page, unsigned offset,
         data_offset += VARCHAR_LENGTH_SIZE;
     }
     // For all types, we then copy the data into the result
-    memcpy((char *)data + data_offset, start + attrStart, len);
+    memcpy((char *)data + data_offset, (char *) record + attrStart, len);
 }
+

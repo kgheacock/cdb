@@ -263,6 +263,7 @@ private:
   void reorganizePage(void *page);
 
   void getAttributeFromRecord(void *page, unsigned offset, unsigned attrIndex, AttrType type, void *data);
+  void getAttributeFromRecord(void *record, unsigned attrIndex, AttrType type, void *data);
 };
 
 #endif

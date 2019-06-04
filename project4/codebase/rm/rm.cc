@@ -1139,15 +1139,20 @@ RC RelationManager::createIndex(const string &tableName, const string &attribute
     rc = getAttributes(tableName, tableAttrs);
     if (rc != SUCCESS)
         return rc;
-    bool hasTargetAttr = false;
-    for (auto attr : tableAttrs)
+
+    int attrIndex = -1;
+    for (auto it = tableAttrs.begin(); it != tableAttrs.end(); it++)
     {
+        auto index = std::distance(tableAttrs.begin(), it);
+        Attribute attr = *it;
         if (attr.name.compare(attributeName) == 0)
         {
-            hasTargetAttr = true;
+            attrIndex = index;
             break;
         }
     }
+
+    bool hasTargetAttr = attrIndex >= 0;
     if (!hasTargetAttr)
         return RM_ATTR_DOES_NOT_EXIST;
 
@@ -1164,6 +1169,55 @@ RC RelationManager::createIndex(const string &tableName, const string &attribute
         ixm->destroyFile(getIndexFileName(tableName, attributeName)); // Try to cleanup index file from before.
         return rc;
     }
+
+    // For each tuple in the table:
+    //     For each index on the table:
+    //         get new key by projecting only the attribute of the index
+    //         insert <key, rid> into index.
+
+    RM_ScanIterator rmsi;
+    vector<string> tableAttrNames;
+    for (auto a : tableAttrs)
+    {
+        tableAttrNames.push_back(a.name);
+    }
+
+    rc = scan(tableName, "", NO_OP, nullptr, tableAttrNames, rmsi); // Scan every tuple.
+    if (rc != SUCCESS)
+    {
+        ixm->destroyFile(getIndexFileName(tableName, attributeName)); // Try to cleanup index file from before.
+        return rc;
+    }
+
+    RID rid;
+    void *data = calloc(PAGE_SIZE, sizeof(uint32_t));
+    void *value = calloc(PAGE_SIZE, sizeof(uint32_t));
+
+    IXFileHandle ixFileHandle;
+    rc = ixm->openFile(getIndexFileName(tableName, attributeName), ixFileHandle);
+    if (rc != SUCCESS)
+        return rc;
+
+    // For each tuple in the table, insert into our index.
+    while ((rc = rmsi.getNextTuple(rid, data)) == SUCCESS)
+    {
+        rc = RecordBasedFileManager::getColumnFromTuple(data, tableAttrs, tableAttrs[attrIndex], value);
+        if (rc)
+        {
+            if (rc == RBFM_READ_FAILED) // NULL value in column.
+            {
+                continue; // Don't insert NULLs into our index.
+            }
+            else
+            {
+                return rc; // Some other error means something broke.
+            }
+        }
+        rc = ixm->insertEntry(ixFileHandle, tableAttrs[attrIndex], value, rid);
+        if (rc)
+            return rc;
+    }
+    ixm->closeFile(ixFileHandle);
 
     return SUCCESS;
 }
