@@ -676,69 +676,6 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data)
     if (rc != SUCCESS)
         return rc;
 
-    /*
-    // Prepare null indicator
-    unsigned nullIndicatorSize = rbfm->getNullIndicatorSize(attributeNames.size());
-    char nullIndicator[nullIndicatorSize];
-    memset(nullIndicator, 0, nullIndicatorSize);
-
-    SlotDirectoryRecordEntry recordEntry = rbfm->getSlotDirectoryRecordEntry(pageData, currSlot);
-
-    // Unsure how large each attribute will be, set to size of page to be safe
-    void *buffer = malloc(PAGE_SIZE);
-    if (buffer == NULL)
-        return RBFM_MALLOC_FAILED;
-
-    // Keep track of offset into data
-    unsigned dataOffset = nullIndicatorSize;
-
-    for (unsigned i = 0; i < attributeNames.size(); i++)
-    {
-        // Get index and type of attribute in record
-        auto pred = [&](Attribute a) { return a.name == attributeNames[i]; };
-        auto iterPos = find_if(recordDescriptor.begin(), recordDescriptor.end(), pred);
-        unsigned index = distance(recordDescriptor.begin(), iterPos);
-        if (index == recordDescriptor.size())
-            return RBFM_NO_SUCH_ATTR;
-        AttrType type = recordDescriptor[index].type;
-
-        // Read attribute into buffer
-        rbfm->getAttributeFromRecord(pageData, recordEntry.offset, index, type, buffer);
-        // Determine if null
-        char null;
-        memcpy(&null, buffer, 1);
-        if (null)
-        {
-            int indicatorIndex = i / CHAR_BIT;
-            char indicatorMask = 1 << (CHAR_BIT - 1 - (i % CHAR_BIT));
-            nullIndicator[indicatorIndex] |= indicatorMask;
-        }
-        // Read from buffer into data
-        else if (type == TypeInt)
-        {
-            memcpy((char *)data + dataOffset, (char *)buffer + 1, INT_SIZE);
-            dataOffset += INT_SIZE;
-        }
-        else if (type == TypeReal)
-        {
-            memcpy((char *)data + dataOffset, (char *)buffer + 1, REAL_SIZE);
-            dataOffset += REAL_SIZE;
-        }
-        else if (type == TypeVarChar)
-        {
-            uint32_t varcharSize;
-            memcpy(&varcharSize, (char *)buffer + 1, VARCHAR_LENGTH_SIZE);
-            memcpy((char *)data + dataOffset, &varcharSize, VARCHAR_LENGTH_SIZE);
-            dataOffset += VARCHAR_LENGTH_SIZE;
-            memcpy((char *)data + dataOffset, (char *)buffer + 1 + VARCHAR_LENGTH_SIZE, varcharSize);
-            dataOffset += varcharSize;
-        }
-    }
-    // Finally set null indicator of data, clean up and return
-    memcpy((char *)data, nullIndicator, nullIndicatorSize);
-
-    free(buffer);
-    */
     rid.pageNum = currPage;
     rid.slotNum = currSlot++;
     return SUCCESS;
