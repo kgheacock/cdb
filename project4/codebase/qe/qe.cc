@@ -136,6 +136,30 @@ void Filter::getAttributes(vector<Attribute> &attrs) const
     iter_->getAttributes(attrs);
 }
 
+RC Project::getNextTuple(void *data)
+{
+    RC rc;
+
+    void *dataBefore = malloc(PAGE_SIZE);
+    rc = iter_->getNextTuple(dataBefore);
+    if (rc != SUCCESS)
+    {
+        free(dataBefore);
+        return rc;
+    }
+
+    RecordBasedFileManager *rbfm = RecordBasedFileManager::instance();
+    void *dataAfter = data;
+    rc = rbfm->project(dataBefore, dataAfter, attrsBeforeProjection_, attrNames_);
+    free(dataBefore);
+    return rc;
+}
+
+void Project::getAttributes(vector<Attribute> &attrs) const
+{
+    attrs = attrs_;
+}
+
 RC evalPredicate(bool &result,
                  const void *leftTuple, const Condition condition, const void *rightTuple,
                  const vector<Attribute> leftAttrs,

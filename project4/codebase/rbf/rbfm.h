@@ -224,6 +224,8 @@ IMPORTANT, PLEASE READ: All methods below this comment (other than the construct
           const vector<string> &attributeNames, // a list of projected attributes
           RBFM_ScanIterator &rbfm_ScanIterator);
 
+  RC project(void *recordBefore, void *recordAfter, vector<Attribute> recordDescriptor, vector<string> &attributeNames);
+
 public:
   friend class RBFM_ScanIterator;
   friend class RelationManager;

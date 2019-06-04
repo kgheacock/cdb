@@ -1,6 +1,7 @@
 #ifndef _qe_h_
 #define _qe_h_
 
+#include <algorithm>
 #include <vector>
 
 #include "../rbf/rbfm.h"
@@ -224,13 +225,30 @@ class Project : public Iterator
 {
     // Projection operator
 public:
-    Project(Iterator *input,                    // Iterator of input R
-            const vector<string> &attrNames){}; // vector containing attribute names
+    Project(Iterator *input,
+            const vector<string> &attrNames) : iter_ {input}
+    {
+        iter_->getAttributes(attrsBeforeProjection_);
+        for (auto a : attrsBeforeProjection_)
+        {
+            if (std::find(attrNames.begin(), attrNames.end(), a.name) != attrNames.end())
+            {
+                attrs_.push_back(a);
+                attrNames_.push_back(a.name);
+            }
+        }
+    };
     ~Project(){};
 
-    RC getNextTuple(void *data) { return QE_EOF; };
+    RC getNextTuple(void *data);
     // For attribute in vector<Attribute>, name it as rel.attr
-    void getAttributes(vector<Attribute> &attrs) const {};
+    void getAttributes(vector<Attribute> &attrs) const;
+
+private:
+    Iterator *iter_;
+    vector<Attribute> attrsBeforeProjection_;
+    vector<Attribute> attrs_;
+    vector<string> attrNames_;
 };
 
 class INLJoin : public Iterator
