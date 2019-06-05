@@ -578,6 +578,7 @@ int populateLeftVarCharTable() {
 	}
 
 clean_up:
+    free(nullsIndicator);
 	free(buf);
 	return rc;
 }
@@ -618,6 +619,7 @@ int populateRightVarCharTable() {
 	}
 
 clean_up:
+    free(nullsIndicator);
 	free(buf);
 	return rc;
 }

@@ -1114,7 +1114,6 @@ RC RelationManager::scan(const string &tableName,
                     compOp, value, attributeNames, rm_ScanIterator.rbfm_iter);
     if (rc)
         return rc;
-
     return SUCCESS;
 }
 
@@ -1189,14 +1188,14 @@ RC RelationManager::createIndex(const string &tableName, const string &attribute
         return rc;
     }
 
-    RID rid;
-    void *data = calloc(PAGE_SIZE, sizeof(uint32_t));
-    void *value = calloc(PAGE_SIZE, sizeof(uint32_t));
-
     IXFileHandle ixFileHandle;
     rc = ixm->openFile(getIndexFileName(tableName, attributeName), ixFileHandle);
     if (rc != SUCCESS)
         return rc;
+    
+    RID rid;
+    void *data = calloc(PAGE_SIZE, sizeof(uint32_t));
+    void *value = calloc(PAGE_SIZE, sizeof(uint32_t));
 
     // For each tuple in the table, insert into our index.
     while ((rc = rmsi.getNextTuple(rid, data)) == SUCCESS)
@@ -1210,15 +1209,22 @@ RC RelationManager::createIndex(const string &tableName, const string &attribute
             }
             else
             {
+                free(data);
+                free(value);
                 return rc; // Some other error means something broke.
             }
         }
         rc = ixm->insertEntry(ixFileHandle, tableAttrs[attrIndex], value, rid);
         if (rc)
+        {
+            free(data);
+            free(value);
             return rc;
+        }
     }
     ixm->closeFile(ixFileHandle);
-
+    free(data);
+    free(value);
     return SUCCESS;
 }
 
