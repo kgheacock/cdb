@@ -179,7 +179,12 @@ RC Project::getNextTuple(void *data)
                     break;
                 default:
                     free(dataBefore);
-                    // Also free up any AttrData.data we have stored.
+                    for (auto it = projectedAttrData.begin(); it != projectedAttrData.end(); it++)
+                    {
+                        AttrData ad = it->second;
+                        if (!ad.isNull)
+                            free(ad.data);
+                    }
                     return QE_NO_SUCH_ATTR_TYPE;
             }
         }
@@ -203,6 +208,7 @@ RC Project::getNextTuple(void *data)
         dataBefore_Offset += attrSize;
         i++;
     }
+    free(dataBefore);
 
     int dataAfter_NullIndSize = RecordBasedFileManager::getNullIndicatorSize(attrNames_.size());
     uint32_t dataAfter_Offset = dataAfter_NullIndSize; // Start copying data after where the null indicator will be.
@@ -226,7 +232,6 @@ RC Project::getNextTuple(void *data)
         j++;
     }
 
-    free(dataBefore);
     return SUCCESS;
 }
 

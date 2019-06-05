@@ -237,15 +237,16 @@ class Project : public Iterator
 public:
     // Assumes that attrNames to project are all valid attributes of tuples from the underlying input Iterator.
     Project(Iterator *input,
-            const vector<string> &attrNames) : iter_ {input}
+            const vector<string> &attrNames) : iter_ {input}, attrNames_ {attrNames}
     {
         iter_->getAttributes(attrsBeforeProjection_);
-        for (auto a : attrsBeforeProjection_)
+        for (auto aname : attrNames_)
         {
-            if (std::find(attrNames.begin(), attrNames.end(), a.name) != attrNames.end())
+            auto matchingAttr = [aname](Attribute a) { return aname == a.name; };
+            auto match = std::find_if(attrsBeforeProjection_.begin(), attrsBeforeProjection_.end(), matchingAttr);
+            if (match != attrsBeforeProjection_.end())
             {
-                attrs_.push_back(a);
-                attrNames_.push_back(a.name);
+                attrs_.push_back(*match);
             }
         }
     };
