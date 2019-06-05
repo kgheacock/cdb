@@ -1184,6 +1184,7 @@ RC RelationManager::createIndex(const string &tableName, const string &attribute
     rc = scan(tableName, "", NO_OP, nullptr, tableAttrNames, rmsi); // Scan every tuple.
     if (rc != SUCCESS)
     {
+        rmsi.close();
         ixm->destroyFile(getIndexFileName(tableName, attributeName)); // Try to cleanup index file from before.
         return rc;
     }
@@ -1191,40 +1192,49 @@ RC RelationManager::createIndex(const string &tableName, const string &attribute
     IXFileHandle ixFileHandle;
     rc = ixm->openFile(getIndexFileName(tableName, attributeName), ixFileHandle);
     if (rc != SUCCESS)
+    {
+        rmsi.close();
         return rc;
+    }
     
     RID rid;
     void *data = calloc(PAGE_SIZE, sizeof(uint32_t));
-    void *value = calloc(PAGE_SIZE, sizeof(uint32_t));
+    //void *value = calloc(PAGE_SIZE, sizeof(uint32_t));
 
     // For each tuple in the table, insert into our index.
     while ((rc = rmsi.getNextTuple(rid, data)) == SUCCESS)
     {
+        void *value = nullptr; // This is alloc'd in getColumnFromTuple.
         rc = RecordBasedFileManager::getColumnFromTuple(data, tableAttrs, tableAttrs[attrIndex], value);
         if (rc)
         {
             if (rc == RBFM_READ_FAILED) // NULL value in column.
             {
+                if (value != nullptr)
+                    free(value);
                 continue; // Don't insert NULLs into our index.
             }
             else
             {
                 free(data);
-                free(value);
+                if (value != nullptr)
+                    free(value);
+                rmsi.close();
                 return rc; // Some other error means something broke.
             }
         }
         rc = ixm->insertEntry(ixFileHandle, tableAttrs[attrIndex], value, rid);
+        free(value);
         if (rc)
         {
             free(data);
-            free(value);
+            rmsi.close();
             return rc;
         }
     }
     ixm->closeFile(ixFileHandle);
     free(data);
-    free(value);
+    rmsi.close();
     return SUCCESS;
 }
 
