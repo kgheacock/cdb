@@ -72,7 +72,7 @@ class TableScan : public Iterator
     // A wrapper inheriting Iterator over RM_ScanIterator
 public:
     RelationManager &rm;
-    RM_ScanIterator *iter;
+    RM_ScanIterator *iter = nullptr;
     string tableName;
     vector<Attribute> attrs;
     vector<string> attrNames;
@@ -135,7 +135,11 @@ public:
 
     ~TableScan()
     {
-        iter->close();
+        if (iter != nullptr)
+        {
+            iter->close();
+            delete iter;
+        }
     };
 };
 
@@ -144,7 +148,7 @@ class IndexScan : public Iterator
     // A wrapper inheriting Iterator over IX_IndexScan
 public:
     RelationManager &rm;
-    RM_IndexScanIterator *iter;
+    RM_IndexScanIterator *iter = nullptr;
     string tableName;
     string attrName;
     vector<Attribute> attrs;
@@ -210,7 +214,11 @@ public:
 
     ~IndexScan()
     {
-        iter->close();
+        if (iter != nullptr)
+        {
+            iter->close();
+            delete iter;
+        }
     };
 };
 
