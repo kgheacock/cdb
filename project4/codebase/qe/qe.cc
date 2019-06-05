@@ -150,7 +150,6 @@ RC Project::getNextTuple(void *data)
 
     RecordBasedFileManager *rbfm = RecordBasedFileManager::instance();
     void *dataAfter = data;
-    rc = rbfm->project(dataBefore, dataAfter, attrsBeforeProjection_, attrNames_);
     free(dataBefore);
     return rc;
 }

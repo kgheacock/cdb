@@ -590,12 +590,26 @@ RC RBFM_ScanIterator::scanInit(FileHandle &fh,
     return SUCCESS;
 }
 
-RC RecordBasedFileManager::project(void *recordBefore, void *recordAfter, vector<Attribute> recordDescriptor, vector<string> &attributeNames)
+RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data)
 {
+    RC rc = getNextSlot();
+    if (rc)
+        return rc;
+
+    // If we are not returning any results, we can just set the RID and return
+    if (attributeNames.size() == 0)
+    {
+        rid.pageNum = currPage;
+        rid.slotNum = currSlot++;
+        return SUCCESS;
+    }
+
     // Prepare null indicator
-    unsigned nullIndicatorSize = getNullIndicatorSize(attributeNames.size());
+    unsigned nullIndicatorSize = rbfm->getNullIndicatorSize(attributeNames.size());
     char nullIndicator[nullIndicatorSize];
     memset(nullIndicator, 0, nullIndicatorSize);
+
+    SlotDirectoryRecordEntry recordEntry = rbfm->getSlotDirectoryRecordEntry(pageData, currSlot);
 
     // Unsure how large each attribute will be, set to size of page to be safe
     void *buffer = malloc(PAGE_SIZE);
@@ -616,7 +630,7 @@ RC RecordBasedFileManager::project(void *recordBefore, void *recordAfter, vector
         AttrType type = recordDescriptor[index].type;
 
         // Read attribute into buffer
-        getAttributeFromRecord(recordBefore, index, type, buffer);
+        rbfm->getAttributeFromRecord(pageData, recordEntry.offset, index, type, buffer);
         // Determine if null
         char null;
         memcpy(&null, buffer, 1);
@@ -629,53 +643,28 @@ RC RecordBasedFileManager::project(void *recordBefore, void *recordAfter, vector
         // Read from buffer into data
         else if (type == TypeInt)
         {
-            memcpy((char *)recordAfter + dataOffset, (char *)buffer + 1, INT_SIZE);
+            memcpy((char *)data + dataOffset, (char *)buffer + 1, INT_SIZE);
             dataOffset += INT_SIZE;
         }
         else if (type == TypeReal)
         {
-            memcpy((char *)recordAfter + dataOffset, (char *)buffer + 1, REAL_SIZE);
+            memcpy((char *)data + dataOffset, (char *)buffer + 1, REAL_SIZE);
             dataOffset += REAL_SIZE;
         }
         else if (type == TypeVarChar)
         {
             uint32_t varcharSize;
             memcpy(&varcharSize, (char *)buffer + 1, VARCHAR_LENGTH_SIZE);
-            memcpy((char *)recordAfter + dataOffset, &varcharSize, VARCHAR_LENGTH_SIZE);
+            memcpy((char *)data + dataOffset, &varcharSize, VARCHAR_LENGTH_SIZE);
             dataOffset += VARCHAR_LENGTH_SIZE;
-            memcpy((char *)recordAfter + dataOffset, (char *)buffer + 1 + VARCHAR_LENGTH_SIZE, varcharSize);
+            memcpy((char *)data + dataOffset, (char *)buffer + 1 + VARCHAR_LENGTH_SIZE, varcharSize);
             dataOffset += varcharSize;
         }
     }
     // Finally set null indicator of data, clean up and return
-    memcpy(recordAfter, nullIndicator, nullIndicatorSize);
+    memcpy((char *)data, nullIndicator, nullIndicatorSize);
 
     free(buffer);
-    return SUCCESS;
-}
-
-RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data)
-{
-    RC rc = getNextSlot();
-    if (rc)
-        return rc;
-
-    // If we are not returning any results, we can just set the RID and return
-    if (attributeNames.size() == 0)
-    {
-        rid.pageNum = currPage;
-        rid.slotNum = currSlot++;
-        return SUCCESS;
-    }
-
-    SlotDirectoryRecordEntry recordEntry = rbfm->getSlotDirectoryRecordEntry(pageData, currSlot);
-    void *recordBefore = (char *) pageData + recordEntry.offset;
-    void *recordAfter = data;
-
-    rc = rbfm->project(recordBefore, recordAfter, recordDescriptor, attributeNames);
-    if (rc != SUCCESS)
-        return rc;
-
     rid.pageNum = currPage;
     rid.slotNum = currSlot++;
     return SUCCESS;
@@ -1167,21 +1156,16 @@ void RecordBasedFileManager::reorganizePage(void *page)
 void RecordBasedFileManager::getAttributeFromRecord(void *page, unsigned offset, unsigned attrIndex, AttrType type, void *data)
 {
     char *start = (char *)page + offset;
-    getAttributeFromRecord(start, attrIndex, type, data);
-}
-
-void RecordBasedFileManager::getAttributeFromRecord(void *record, unsigned attrIndex, AttrType type, void *data)
-{
     unsigned data_offset = 0;
 
     // Get number of columns
     RecordLength n;
-    memcpy(&n, record, sizeof(RecordLength));
+    memcpy(&n, start, sizeof(RecordLength));
 
     // Get null indicator
     int recordNullIndicatorSize = getNullIndicatorSize(n);
     char recordNullIndicator[recordNullIndicatorSize];
-    memcpy(recordNullIndicator, (char *) record + sizeof(RecordLength), recordNullIndicatorSize);
+    memcpy(recordNullIndicator, (char *) start + sizeof(RecordLength), recordNullIndicatorSize);
 
     // Set null indicator for result
     char resultNullIndicator = 0;
@@ -1198,11 +1182,11 @@ void RecordBasedFileManager::getAttributeFromRecord(void *record, unsigned attrI
     // Our directory at the beginning of each record contains pointers to the ends of each attribute,
     // so we can pull attrEnd from that
     ColumnOffset attrEnd, attrStart;
-    memcpy(&attrEnd, (char *) record + header_offset + attrIndex * sizeof(ColumnOffset), sizeof(ColumnOffset));
+    memcpy(&attrEnd, (char *) start + header_offset + attrIndex * sizeof(ColumnOffset), sizeof(ColumnOffset));
     // The start is either the end of the previous attribute, or the start of the data section of the
     // record if we are after the 0th attribute
     if (attrIndex > 0)
-        memcpy(&attrStart, (char *) record + header_offset + (attrIndex - 1) * sizeof(ColumnOffset), sizeof(ColumnOffset));
+        memcpy(&attrStart, (char *) start + header_offset + (attrIndex - 1) * sizeof(ColumnOffset), sizeof(ColumnOffset));
     else
         attrStart = header_offset + n * sizeof(ColumnOffset);
     // The length of any attribute is just the difference between its start and end
@@ -1214,6 +1198,6 @@ void RecordBasedFileManager::getAttributeFromRecord(void *record, unsigned attrI
         data_offset += VARCHAR_LENGTH_SIZE;
     }
     // For all types, we then copy the data into the result
-    memcpy((char *)data + data_offset, (char *) record + attrStart, len);
+    memcpy((char *)data + data_offset, (char *) start + attrStart, len);
 }
 
