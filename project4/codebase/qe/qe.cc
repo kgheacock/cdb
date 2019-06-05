@@ -2,6 +2,7 @@
 #include "qe.h"
 #include <string.h>
 #include <algorithm>
+#include <unordered_map>
 
 int Value::compare(const int key, const int value)
 {
@@ -148,10 +149,85 @@ RC Project::getNextTuple(void *data)
         return rc;
     }
 
-    RecordBasedFileManager *rbfm = RecordBasedFileManager::instance();
-    void *dataAfter = data;
+    int dataBefore_NullIndSize = RecordBasedFileManager::getNullIndicatorSize(attrsBeforeProjection_.size());
+    void *dataBefore_NullInd = dataBefore;
+    uint32_t dataBefore_Offset = dataBefore_NullIndSize;
+
+    unordered_map<string, AttrData> projectedAttrData;
+
+    int i = 0;
+    for (auto attr : attrsBeforeProjection_)
+    {
+        uint32_t attrSize;
+        if (RecordBasedFileManager::fieldIsNull((char *) dataBefore_NullInd, i))
+        {
+            attrSize = 0;
+        }
+        else
+        {
+            // Get size of attribute.
+            int varCharLength;
+            switch (attr.type)
+            {
+                case TypeInt:
+                case TypeReal:
+                    attrSize = sizeof(uint32_t);
+                    break;
+                case TypeVarChar:
+                    memcpy(&varCharLength, (char *) dataBefore + dataBefore_Offset, sizeof(uint32_t));
+                    attrSize = sizeof(uint32_t) + varCharLength; // Word of length + length itself.
+                    break;
+                default:
+                    free(dataBefore);
+                    // Also free up any AttrData.data we have stored.
+                    return QE_NO_SUCH_ATTR_TYPE;
+            }
+        }
+
+        auto isProjectedAttr = [attr](string aname) { return aname == attr.name; };
+        if (find_if(attrNames_.begin(), attrNames_.end(), isProjectedAttr) != attrNames_.end())
+        {
+            AttrData ad;
+            ad.attr = attr;
+            ad.size = attrSize;
+            ad.isNull = attrSize == 0;
+            if (!ad.isNull)
+            {
+                ad.data = calloc(ad.size, sizeof(uint8_t));
+                memcpy(ad.data, (char *) dataBefore + dataBefore_Offset, ad.size);
+            }
+
+            projectedAttrData[attr.name] = ad;
+        }
+
+        dataBefore_Offset += attrSize;
+        i++;
+    }
+
+    int dataAfter_NullIndSize = RecordBasedFileManager::getNullIndicatorSize(attrNames_.size());
+    uint32_t dataAfter_Offset = dataAfter_NullIndSize; // Start copying data after where the null indicator will be.
+
+    int j = 0;
+    for (auto attrName : attrNames_) // Go through in projected order and copy into new tuple.
+    {
+        AttrData pa = projectedAttrData[attrName];
+        if (pa.isNull)
+        {
+            int indicatorIndex = j / CHAR_BIT;
+            char indicatorMask = 1 << (CHAR_BIT - 1 - (j % CHAR_BIT));
+            ((char *) data)[indicatorIndex] |= indicatorMask;
+        }
+        else
+        {
+            memcpy((char *) data + dataAfter_Offset, pa.data, pa.size);
+            dataAfter_Offset += pa.size;
+            free(pa.data);
+        }
+        j++;
+    }
+
     free(dataBefore);
-    return rc;
+    return SUCCESS;
 }
 
 void Project::getAttributes(vector<Attribute> &attrs) const
