@@ -45,7 +45,6 @@ RC testCase_9()
 	while (inlJoin->getNextTuple(data) != QE_EOF)
 	{
 		int offset = 0;
-		RecordBasedFileManager::printRecord(descriptor, data);
 		// Is an attribute left.A NULL?
 		nullBit = *(unsigned char *)((char *)data) & (1 << 7);
 		if (nullBit)
