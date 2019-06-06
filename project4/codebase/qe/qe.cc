@@ -311,12 +311,10 @@ RC INLJoin::getNextTuple(void *data)
     void *leftValue;
     while ((rcLeft = left->getNextTuple(leftTuple)) == SUCCESS)
     {
-        RecordBasedFileManager::printRecord(leftDescriptor, leftTuple);
         RecordBasedFileManager::getColumnFromTuple(leftTuple, leftDescriptor, leftJoinAttr.name, leftValue);
         //find exact match of leftValue in right
         right->setIterator(leftValue, leftValue, true, true);
         rcRight = right->getNextTuple(rightTuple);
-        RecordBasedFileManager::printRecord(rightDescriptor, rightTuple);
         free(leftValue);
         if (rcRight == SUCCESS)
         {
