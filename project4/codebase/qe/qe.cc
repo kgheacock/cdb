@@ -213,6 +213,8 @@ RC Project::getNextTuple(void *data)
     free(dataBefore);
 
     int dataAfter_NullIndSize = RecordBasedFileManager::getNullIndicatorSize(attrNames_.size());
+    memset(data, 0, dataAfter_NullIndSize);
+
     uint32_t dataAfter_Offset = dataAfter_NullIndSize; // Start copying data after where the null indicator will be.
 
     int j = 0;
