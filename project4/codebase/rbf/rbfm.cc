@@ -226,7 +226,7 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
     free(pageData);
     return rc;
 }
-RC RecordBasedFileManager::getColumnFromTuple(const void *tuple, const vector<Attribute> recordDescriptor, Attribute attr, void *&value)
+RC RecordBasedFileManager::getColumnFromTuple(const void *tuple, const vector<Attribute> recordDescriptor, string attrName, void *&value)
 {
     int offset = getNullIndicatorSize(recordDescriptor.size());
     char nullIndicator[offset];
@@ -236,7 +236,7 @@ RC RecordBasedFileManager::getColumnFromTuple(const void *tuple, const vector<At
     bool isNull = false;
     for (auto _attr = recordDescriptor.begin(); _attr != recordDescriptor.end(); ++_attr)
     {
-        isTargetValue = _attr->name.compare(attr.name) == 0;
+        isTargetValue = _attr->name.compare(attrName) == 0;
         isNull = fieldIsNull(nullIndicator, 1);
         if (isNull && isTargetValue)
             return RBFM_READ_FAILED;
@@ -669,7 +669,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data)
     }
 
     SlotDirectoryRecordEntry recordEntry = rbfm->getSlotDirectoryRecordEntry(pageData, currSlot);
-    void *recordBefore = (char *) pageData + recordEntry.offset;
+    void *recordBefore = (char *)pageData + recordEntry.offset;
     void *recordAfter = data;
 
     rc = rbfm->project(recordBefore, recordAfter, recordDescriptor, attributeNames);
@@ -1181,7 +1181,7 @@ void RecordBasedFileManager::getAttributeFromRecord(void *record, unsigned attrI
     // Get null indicator
     int recordNullIndicatorSize = getNullIndicatorSize(n);
     char recordNullIndicator[recordNullIndicatorSize];
-    memcpy(recordNullIndicator, (char *) record + sizeof(RecordLength), recordNullIndicatorSize);
+    memcpy(recordNullIndicator, (char *)record + sizeof(RecordLength), recordNullIndicatorSize);
 
     // Set null indicator for result
     char resultNullIndicator = 0;
@@ -1198,11 +1198,11 @@ void RecordBasedFileManager::getAttributeFromRecord(void *record, unsigned attrI
     // Our directory at the beginning of each record contains pointers to the ends of each attribute,
     // so we can pull attrEnd from that
     ColumnOffset attrEnd, attrStart;
-    memcpy(&attrEnd, (char *) record + header_offset + attrIndex * sizeof(ColumnOffset), sizeof(ColumnOffset));
+    memcpy(&attrEnd, (char *)record + header_offset + attrIndex * sizeof(ColumnOffset), sizeof(ColumnOffset));
     // The start is either the end of the previous attribute, or the start of the data section of the
     // record if we are after the 0th attribute
     if (attrIndex > 0)
-        memcpy(&attrStart, (char *) record + header_offset + (attrIndex - 1) * sizeof(ColumnOffset), sizeof(ColumnOffset));
+        memcpy(&attrStart, (char *)record + header_offset + (attrIndex - 1) * sizeof(ColumnOffset), sizeof(ColumnOffset));
     else
         attrStart = header_offset + n * sizeof(ColumnOffset);
     // The length of any attribute is just the difference between its start and end
@@ -1214,6 +1214,5 @@ void RecordBasedFileManager::getAttributeFromRecord(void *record, unsigned attrI
         data_offset += VARCHAR_LENGTH_SIZE;
     }
     // For all types, we then copy the data into the result
-    memcpy((char *)data + data_offset, (char *) record + attrStart, len);
+    memcpy((char *)data + data_offset, (char *)record + attrStart, len);
 }
-
