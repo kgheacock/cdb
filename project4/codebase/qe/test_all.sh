@@ -31,10 +31,9 @@ echo "============================================"
 ./qetest_04
 ./qetest_05
 ./qetest_06
-./qetest_07
-./qetest_08
 ./qetest_09
 ./qetest_10
+./qetest_11
 
 echo "============================================"
 echo "Successfully returned from all tests"

@@ -105,14 +105,15 @@ RC Filter::getNextTuple(void *data)
     if (iter_tuple == nullptr)
         return -1;
 
-    while (iter_->getNextTuple(iter_tuple) != QE_EOF) {
+    RC rc;
+    while ((rc = iter_->getNextTuple(iter_tuple)) == SUCCESS) {
 
         /* For simplified Filter, we only compare with:
          *   - the tuple we just got, or
          *   - some predefined value in condition.
          */
         bool result;
-        auto rc = evalPredicate(result, iter_tuple, cond_, iter_tuple, attrs, attrs);
+        rc = evalPredicate(result, iter_tuple, cond_, iter_tuple, attrs, attrs);
         if (rc != SUCCESS)
         {
             free(iter_tuple);
@@ -129,7 +130,7 @@ RC Filter::getNextTuple(void *data)
     }
 
     free(iter_tuple);
-    return QE_EOF;
+    return rc;
 }
 
 void Filter::getAttributes(vector<Attribute> &attrs) const
