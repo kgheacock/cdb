@@ -333,8 +333,8 @@ RC RelationManager::getIndexes(const string &tableName, vector<string> &indexes)
     RID rid;
 
     void *value = malloc(sizeof(uint32_t) + tableName.length());
-    * (int *) value = tableName.length();
-    memcpy((char *) value + sizeof(uint32_t), tableName.c_str(), tableName.length());
+    *(int *)value = tableName.length();
+    memcpy((char *)value + sizeof(uint32_t), tableName.c_str(), tableName.length());
 
     void *indexColumnName = malloc(PAGE_SIZE);
     //toAPI(tableName, value);
@@ -415,7 +415,7 @@ RC RelationManager::insertTuple(const string &tableName, const void *data, RID &
             rc = im->openFile(getIndexFileName(tableName, attr.name), ixFileHandle);
             if (rc)
                 return rc;
-            rc = RecordBasedFileManager::getColumnFromTuple(data, recordDescriptor, attr, value);
+            rc = RecordBasedFileManager::getColumnFromTuple(data, recordDescriptor, attr.name, value);
             if (rc)
                 return rc;
             rc = im->insertEntry(ixFileHandle, attr, value, rid);
@@ -472,7 +472,7 @@ RC RelationManager::deleteTuple(const string &tableName, const RID &rid)
             rc = im->openFile(getIndexFileName(tableName, attr.name), ixFileHandle);
             if (rc)
                 return rc;
-            rc = RecordBasedFileManager::getColumnFromTuple(data, recordDescriptor, attr, value);
+            rc = RecordBasedFileManager::getColumnFromTuple(data, recordDescriptor, attr.name, value);
             if (rc)
                 return rc;
             rc = im->deleteEntry(ixFileHandle, attr, value, rid);
@@ -536,12 +536,12 @@ RC RelationManager::updateTuple(const string &tableName, const void *data, const
             rc = im->openFile(getIndexFileName(tableName, attr.name), ixFileHandle);
             if (rc)
                 return rc;
-            rc = RecordBasedFileManager::getColumnFromTuple(currentData, recordDescriptor, attr, value);
+            rc = RecordBasedFileManager::getColumnFromTuple(currentData, recordDescriptor, attr.name, value);
             if (rc)
                 return rc;
             rc = im->deleteEntry(ixFileHandle, attr, value, rid);
             free(value);
-            rc = RecordBasedFileManager::getColumnFromTuple(data, recordDescriptor, attr, value);
+            rc = RecordBasedFileManager::getColumnFromTuple(data, recordDescriptor, attr.name, value);
             if (rc)
                 return rc;
             rc = im->insertEntry(ixFileHandle, attr, value, rid);
@@ -1196,7 +1196,7 @@ RC RelationManager::createIndex(const string &tableName, const string &attribute
         rmsi.close();
         return rc;
     }
-    
+
     RID rid;
     void *data = calloc(PAGE_SIZE, sizeof(uint32_t));
     //void *value = calloc(PAGE_SIZE, sizeof(uint32_t));
@@ -1205,7 +1205,7 @@ RC RelationManager::createIndex(const string &tableName, const string &attribute
     while ((rc = rmsi.getNextTuple(rid, data)) == SUCCESS)
     {
         void *value = nullptr; // This is alloc'd in getColumnFromTuple.
-        rc = RecordBasedFileManager::getColumnFromTuple(data, tableAttrs, tableAttrs[attrIndex], value);
+        rc = RecordBasedFileManager::getColumnFromTuple(data, tableAttrs, tableAttrs[attrIndex].name, value);
         if (rc)
         {
             if (rc == RBFM_READ_FAILED) // NULL value in column.
@@ -1375,8 +1375,7 @@ RC RelationManager::indexScan(const string &tableName,
         highKey,
         lowKeyInclusive,
         highKeyInclusive,
-        rm_IndexScanIterator.indexScanIterator
-    );
+        rm_IndexScanIterator.indexScanIterator);
     if (rc != SUCCESS)
         return rc;
 

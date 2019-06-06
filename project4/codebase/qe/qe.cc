@@ -47,8 +47,8 @@ int Value::compare(const void *key, const void *value, const AttrType attrType)
     }
     case TypeVarChar:
     {
-        size_t key_size;
-        size_t value_size;
+        uint32_t key_size = 0;
+        uint32_t value_size = 0;
         memcpy(&key_size, key, sizeof(uint32_t));
         memcpy(&value_size, value, sizeof(uint32_t));
         char key_array[key_size + 1];
@@ -298,44 +298,123 @@ RC evalPredicate(bool &result,
 
     return SUCCESS;
 }
+//Right has index so left is the outer and right is the inner
 
 RC INLJoin::getNextTuple(void *data)
 {
     RC rcRight;
-    void *leftTuple = malloc(PAGE_SIZE);
-    RC rcLeft = left->getNextTuple(leftTuple);
+    RC rcLeft = SUCCESS;
     void *rightTuple = malloc(PAGE_SIZE);
-    void *leftValueData;
-    Value leftValue;
-    leftValue.type = joinAttr.type;
-    Value rightValue;
-    rightValue.type = joinAttr.type;
-    while (rcLeft == SUCCESS)
+    void *leftTuple = malloc(PAGE_SIZE);
+    void *leftValue;
+    while ((rcLeft = left->getNextTuple(leftTuple)) == SUCCESS)
     {
-        RecordBasedFileManager::getColumnFromTuple(leftTuple, leftDescriptor, condition.lhsAttr, leftValue.data);
-        //Do we already have an iterator
-        if (Value::compare(right->key, leftValue.data, joinAttr.type) != 0)
-            right->setIterator(leftValue.data, leftValue.data, true, true);
+        RecordBasedFileManager::printRecord(leftDescriptor, leftTuple);
+        RecordBasedFileManager::getColumnFromTuple(leftTuple, leftDescriptor, leftJoinAttr.name, leftValue);
+        //find exact match of leftValue in right
+        right->setIterator(leftValue, leftValue, true, true);
         rcRight = right->getNextTuple(rightTuple);
-        //leftValue is not present in the right table
-        if (rcRight == IX_EOF)
-        {
-            free(leftValue.data);
-            memset(leftTuple, 0, PAGE_SIZE);
-            memset(rightTuple, 0, PAGE_SIZE);
-            rcLeft = left->getNextTuple(leftTuple);
-            continue;
-        }
-        //leftValue = rightValue{
-        else
+        RecordBasedFileManager::printRecord(rightDescriptor, rightTuple);
+        free(leftValue);
+        if (rcRight == SUCCESS)
         {
             concat(leftTuple, rightTuple, data);
-            free(leftTuple);
             free(rightTuple);
-            free(leftValue.data);
+            free(leftTuple);
             return SUCCESS;
         }
+
+        memset(rightTuple, 0, PAGE_SIZE);
+        memset(leftTuple, 0, PAGE_SIZE);
     }
-    if (rcLeft == IX_EOF)
-        return rcLeft;
+    free(rightTuple);
+    free(leftTuple);
+    return rcLeft;
+}
+bool fieldIsNull(char *nullIndicator, int i)
+{
+    int indicatorIndex = i / CHAR_BIT;
+    int indicatorMask = 1 << (CHAR_BIT - 1 - (i % CHAR_BIT));
+    return (nullIndicator[indicatorIndex] & indicatorMask) != 0;
+}
+unsigned getRecordSize(const vector<Attribute> &recordDescriptor, const void *data)
+{
+    // Read in the null indicator
+    int nullIndicatorSize = RecordBasedFileManager::getNullIndicatorSize(recordDescriptor.size());
+    char nullIndicator[nullIndicatorSize];
+    memset(nullIndicator, 0, nullIndicatorSize);
+    memcpy(nullIndicator, (char *)data, nullIndicatorSize);
+
+    // Offset into *data. Start just after null indicator
+    unsigned offset = nullIndicatorSize;
+    // Running count of size. Initialize to size of header
+
+    for (unsigned i = 0; i < (unsigned)recordDescriptor.size(); i++)
+    {
+        // Skip null fields
+        if (fieldIsNull(nullIndicator, i))
+            continue;
+        switch (recordDescriptor[i].type)
+        {
+        case TypeInt:
+            offset += INT_SIZE;
+            break;
+        case TypeReal:
+            offset += REAL_SIZE;
+            break;
+        case TypeVarChar:
+            uint32_t varcharSize;
+            // We have to get the size of the VarChar field by reading the integer that precedes the string value itself
+            memcpy(&varcharSize, (char *)data + offset, VARCHAR_LENGTH_SIZE);
+            offset += varcharSize + VARCHAR_LENGTH_SIZE;
+            break;
+        }
+    }
+
+    return offset;
+}
+
+void INLJoin::concat(const void *left, const void *right, void *data)
+{
+    int leftFieldCount = leftDescriptor.size();
+    int rightFieldCount = rightDescriptor.size();
+    int totalFieldCount = leftFieldCount + rightFieldCount;
+    int leftNullSize = RecordBasedFileManager::getNullIndicatorSize(leftFieldCount);
+    int rightNullSize = RecordBasedFileManager::getNullIndicatorSize(rightFieldCount);
+    int finalNullSize = RecordBasedFileManager::getNullIndicatorSize(totalFieldCount);
+    size_t leftSize = getRecordSize(leftDescriptor, left);
+    size_t rightSize = getRecordSize(rightDescriptor, right);
+    unsigned char rightNullFlag[rightNullSize];
+    memcpy(&rightNullFlag, right, rightNullSize);
+    //take left null flags as is
+    memcpy(data, left, leftNullSize);
+    if (leftNullSize + rightNullSize != finalNullSize)
+    {
+        int currentFieldNumber = leftFieldCount;
+        //start 1 byte before the last left field
+        int currentByteNumber = -1;
+        int rightFieldNumberIterator = 0;
+        unsigned char nullByte;
+        memcpy(&nullByte, (char *)data + leftNullSize - currentByteNumber, 1);
+        while (currentFieldNumber != totalFieldCount)
+        {
+
+            nullByte = nullByte | (rightNullFlag[rightFieldNumberIterator % 8] & 1 << (rightFieldNumberIterator % 8));
+            ++currentFieldNumber;
+            ++rightFieldNumberIterator;
+            if (currentFieldNumber % 8 == 0)
+            {
+                //copy out the old byte
+                memcpy((char *)data + leftNullSize + currentByteNumber, &nullByte, 1);
+                ++currentByteNumber;
+            }
+        }
+        //Copy out partial byte
+        if (leftNullSize + currentByteNumber < finalNullSize)
+        {
+            memcpy((char *)data + leftNullSize + currentByteNumber, &nullByte, 1);
+        }
+    }
+    memcpy((char *)data + finalNullSize, (char *)left + leftNullSize, leftSize - leftNullSize);
+    memcpy((char *)data + finalNullSize + leftSize, (char *)right + rightNullSize, rightSize - rightNullSize);
 }

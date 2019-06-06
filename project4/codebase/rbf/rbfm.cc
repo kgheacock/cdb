@@ -237,7 +237,7 @@ RC RecordBasedFileManager::getColumnFromTuple(const void *tuple, const vector<At
     for (auto _attr = recordDescriptor.begin(); _attr != recordDescriptor.end(); ++_attr)
     {
         isTargetValue = _attr->name.compare(attrName) == 0;
-        isNull = fieldIsNull(nullIndicator, 1);
+        isNull = fieldIsNull(nullIndicator, i);
         if (isNull && isTargetValue)
             return RBFM_READ_FAILED;
         if (!fieldIsNull(nullIndicator, i))

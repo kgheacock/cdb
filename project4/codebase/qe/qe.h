@@ -279,7 +279,7 @@ public:
     INLJoin(Iterator *leftIn,          // Iterator of input R
             IndexScan *rightIn,        // IndexScan Iterator of input S
             const Condition &condition // Join condition
-            ) : left(leftIn), right(rightIn), condition(condition), wasEqual(false)
+            ) : left(leftIn), right(rightIn), condition(condition)
     {
         left->getAttributes(leftDescriptor);
         right->getAttributes(rightDescriptor);
@@ -287,29 +287,46 @@ public:
         {
             if (attr.name.compare(condition.lhsAttr) == 0)
             {
-                joinAttr = attr;
-                return;
+                leftJoinAttr = attr;
+                break;
             }
         }
-        throw "Join attribute not found in record descriptor";
+        for (Attribute attr : rightDescriptor)
+        {
+            if (attr.name.compare(condition.rhsAttr) == 0)
+            {
+                rightJoinAttr = attr;
+                break;
+            }
+        }
     };
     ~INLJoin(){};
 
     RC getNextTuple(void *data);
     // For attribute in vector<Attribute>, name it as rel.attr
-    void getAttributes(vector<Attribute> &attrs) const {};
+    void getAttributes(vector<Attribute> &attrs) const
+    {
+        attrs.clear();
+        attrs = this->leftDescriptor;
+        for (unsigned int i = 0; i < (unsigned int)rightDescriptor.size(); ++i)
+        {
+            attrs.push_back(rightDescriptor.at(i));
+        }
+    };
+
+private:
     Iterator *left;
     IndexScan *right;
-    void *previousLeft;
     vector<Attribute> leftDescriptor;
     vector<Attribute> rightDescriptor;
-    Attribute joinAttr;
-    bool wasEqual;
+    Attribute leftJoinAttr;
+    Attribute rightJoinAttr;
     const Condition condition;
+    void concat(const void *left, const void *right, void *data);
 };
 
 RC evalPredicate(bool &result,
-                 const void *leftTuple, const Condition condition, const void *rightTuple,
+                 const void *leftTuple, Condition condition, const void *rightTuple,
                  const vector<Attribute> leftAttrs,
                  const vector<Attribute> rightAttrs);
 

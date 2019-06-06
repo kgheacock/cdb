@@ -9,11 +9,13 @@
 
 #include "qe_test_util.h"
 
-RC testCase_9() {
+RC testCase_9()
+{
 	// Mandatory for all
 	// 1. INLJoin -- on TypeReal Attribute
 	// SELECT * from left, right WHERE left.C = right.C
-	cerr << endl << "***** In QE Test Case 9 *****" << endl;
+	cerr << endl
+		 << "***** In QE Test Case 9 *****" << endl;
 
 	RC rc = success;
 
@@ -37,81 +39,99 @@ RC testCase_9() {
 	// Go over the data through iterator
 	void *data = malloc(bufSize);
 	bool nullBit = false;
-	
-	while (inlJoin->getNextTuple(data) != QE_EOF) {
-		int offset = 0;
+	vector<Attribute> descriptor;
+	inlJoin->getAttributes(descriptor);
 
+	while (inlJoin->getNextTuple(data) != QE_EOF)
+	{
+		int offset = 0;
+		RecordBasedFileManager::printRecord(descriptor, data);
 		// Is an attribute left.A NULL?
 		nullBit = *(unsigned char *)((char *)data) & (1 << 7);
-		if (nullBit) {
-			cerr << endl << "***** A returned value is not correct. *****" << endl;
+		if (nullBit)
+		{
+			cerr << endl
+				 << "***** A returned value is not correct. *****" << endl;
 			goto clean_up;
 		}
 		// Print left.A
-		cerr << "left.A " << *(int *) ((char *) data + offset + 1);
+		cerr << "left.A " << *(int *)((char *)data + offset + 1);
 		offset += sizeof(int);
 
 		// Is an attribute left.B NULL?
 		nullBit = *(unsigned char *)((char *)data) & (1 << 6);
-		if (nullBit) {
-			cerr << endl << "***** A returned value is not correct. *****" << endl;
+		if (nullBit)
+		{
+			cerr << endl
+				 << "***** A returned value is not correct. *****" << endl;
 			goto clean_up;
 		}
 		// Print left.B
-		cerr << "  left.B " << *(int *) ((char *) data + offset + 1);
+		cerr << "  left.B " << *(int *)((char *)data + offset + 1);
 		offset += sizeof(int);
 
 		// Is an attribute left.C NULL?
 		nullBit = *(unsigned char *)((char *)data) & (1 << 5);
-		if (nullBit) {
-			cerr << endl << "***** A returned value is not correct. *****" << endl;
+		if (nullBit)
+		{
+			cerr << endl
+				 << "***** A returned value is not correct. *****" << endl;
 			goto clean_up;
 		}
 		// Print left.C
-		cerr << "  left.C " << *(float *) ((char *) data + offset + 1);
+		cerr << "  left.C " << *(float *)((char *)data + offset + 1);
 		offset += sizeof(float);
 
 		// Is an attribute right.B NULL?
 		nullBit = *(unsigned char *)((char *)data) & (1 << 5);
-		if (nullBit) {
-			cerr << endl << "***** A returned value is not correct. *****" << endl;
+		if (nullBit)
+		{
+			cerr << endl
+				 << "***** A returned value is not correct. *****" << endl;
 			goto clean_up;
 		}
 		// Print right.B
-		cerr << "  right.B " << *(int *) ((char *) data + offset + 1);
+		cerr << "  right.B " << *(int *)((char *)data + offset + 1);
 		offset += sizeof(int);
 
 		// Is an attribute right.C NULL?
 		nullBit = *(unsigned char *)((char *)data) & (1 << 4);
-		if (nullBit) {
-			cerr << endl << "***** A returned value is not correct. *****" << endl;
+		if (nullBit)
+		{
+			cerr << endl
+				 << "***** A returned value is not correct. *****" << endl;
 			goto clean_up;
 		}
 		// Print right.C
-		valueC = *(float *) ((char *) data + offset + 1);
+		valueC = *(float *)((char *)data + offset + 1);
 		cerr << "  right.C " << valueC;
 		offset += sizeof(float);
-		if (valueC < 50.0 || valueC > 124.0) {
-			cerr << endl << "***** A returned value is not correct. *****" << endl;
+		if (valueC < 50.0 || valueC > 124.0)
+		{
+			cerr << endl
+				 << "***** A returned value is not correct. *****" << endl;
 			rc = fail;
 			goto clean_up;
 		}
 
 		// Is an attribute right.C NULL?
 		nullBit = *(unsigned char *)((char *)data) & (1 << 3);
-		if (nullBit) {
-			cerr << endl << "***** A returned value is not correct. *****" << endl;
+		if (nullBit)
+		{
+			cerr << endl
+				 << "***** A returned value is not correct. *****" << endl;
 			goto clean_up;
 		}
 		// Print right.D
-		cerr << "  right.D " << *(int *) ((char *) data + offset + 1) << endl;
+		cerr << "  right.D " << *(int *)((char *)data + offset + 1) << endl;
 		offset += sizeof(int);
 
 		memset(data, 0, bufSize);
 		actualResultCnt++;
 	}
 
-	if (expectedResultCnt != actualResultCnt) {
+	if (expectedResultCnt != actualResultCnt)
+	{
 		cerr << "***** The number of returned tuple is not correct. *****" << endl;
 		rc = fail;
 	}
@@ -124,12 +144,16 @@ clean_up:
 	return rc;
 }
 
-int main() {
+int main()
+{
 
-	if (testCase_9() != success) {
+	if (testCase_9() != success)
+	{
 		cerr << "***** [FAIL] QE Test Case 9 failed. *****" << endl;
 		return fail;
-	} else {
+	}
+	else
+	{
 		cerr << "***** QE Test Case 9 finished. The result will be examined. *****" << endl;
 		return success;
 	}
