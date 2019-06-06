@@ -337,6 +337,14 @@ bool fieldIsNull(char *nullIndicator, int i)
     int indicatorMask = 1 << (CHAR_BIT - 1 - (i % CHAR_BIT));
     return (nullIndicator[indicatorIndex] & indicatorMask) != 0;
 }
+void setNull(char *nullIndicator, int i)
+{
+    int indicatorIndex = i / CHAR_BIT;
+    int indicatorMask = 1 << (CHAR_BIT - 1 - (i % CHAR_BIT));
+    nullIndicator[indicatorIndex] = nullIndicator[indicatorIndex] | indicatorMask;
+    if (!fieldIsNull(nullIndicator, i))
+        throw "SET NULL FAILED";
+}
 unsigned getRecordSize(const vector<Attribute> &recordDescriptor, const void *data)
 {
     // Read in the null indicator
@@ -384,37 +392,36 @@ void INLJoin::concat(const void *left, const void *right, void *data)
     int finalNullSize = RecordBasedFileManager::getNullIndicatorSize(totalFieldCount);
     size_t leftSize = getRecordSize(leftDescriptor, left);
     size_t rightSize = getRecordSize(rightDescriptor, right);
-    unsigned char rightNullFlag[rightNullSize];
+    char finalNullFlag[finalNullSize];
+    memset(finalNullFlag, 0, finalNullSize);
+    char leftNullFlag[leftNullSize];
+    char rightNullFlag[rightNullSize];
+    memcpy(&leftNullFlag, left, leftNullSize);
     memcpy(&rightNullFlag, right, rightNullSize);
-    //take left null flags as is
-    memcpy(data, left, leftNullSize);
-    if (leftNullSize + rightNullSize != finalNullSize)
+    for (int i = 0; i < totalFieldCount; i++)
     {
-        int currentFieldNumber = leftFieldCount;
-        //start 1 byte before the last left field
-        int currentByteNumber = -1;
-        int rightFieldNumberIterator = 0;
-        unsigned char nullByte;
-        memcpy(&nullByte, (char *)data + leftNullSize - currentByteNumber, 1);
-        while (currentFieldNumber != totalFieldCount)
+        //copy from left
+        if (i < leftFieldCount)
         {
-
-            nullByte = nullByte | (rightNullFlag[rightFieldNumberIterator % 8] & 1 << (rightFieldNumberIterator % 8));
-            ++currentFieldNumber;
-            ++rightFieldNumberIterator;
-            if (currentFieldNumber % 8 == 0)
+            if (fieldIsNull(leftNullFlag, i))
             {
-                //copy out the old byte
-                memcpy((char *)data + leftNullSize + currentByteNumber, &nullByte, 1);
-                ++currentByteNumber;
+                setNull(finalNullFlag, i);
             }
         }
-        //Copy out partial byte
-        if (leftNullSize + currentByteNumber < finalNullSize)
+        //copy from right
+        else
         {
-            memcpy((char *)data + leftNullSize + currentByteNumber, &nullByte, 1);
+            if (fieldIsNull(rightNullFlag, i - leftFieldCount))
+            {
+                setNull(finalNullFlag, i);
+            }
         }
     }
-    memcpy((char *)data + finalNullSize, (char *)left + leftNullSize, leftSize - leftNullSize);
-    memcpy((char *)data + finalNullSize + leftSize, (char *)right + rightNullSize, rightSize - rightNullSize);
+    //take left null flags as is
+    int offset = 0;
+    memcpy(data, finalNullFlag, finalNullSize);
+    offset += finalNullSize;
+    memcpy((char *)data + offset, (char *)left + leftNullSize, leftSize - leftNullSize);
+    offset += (leftSize - leftNullSize);
+    memcpy((char *)data + offset, (char *)right + rightNullSize, rightSize - rightNullSize);
 }
