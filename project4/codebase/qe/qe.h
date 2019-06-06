@@ -10,6 +10,7 @@
 #define QE_EOF (-1) // end of the index scan
 #define QE_NO_SUCH_ATTR (-2)
 #define QE_MISMATCHED_ATTR_TYPES (-3)
+#define QE_NO_SUCH_ATTR_TYPE (-4)
 
 using namespace std;
 
@@ -22,10 +23,19 @@ typedef enum
     AVG
 } AggregateOp;
 
+struct AttrData
+{
+    Attribute attr;
+    int size;
+    bool isNull;
+    void *data;
+};
+
 // The following functions use the following
 // format for the passed data.
 //    For INT and REAL: use 4 bytes
 //    For VARCHAR: use 4 bytes for the length followed by the characters
+//
 
 struct Value
 {
@@ -62,7 +72,7 @@ class TableScan : public Iterator
     // A wrapper inheriting Iterator over RM_ScanIterator
 public:
     RelationManager &rm;
-    RM_ScanIterator *iter;
+    RM_ScanIterator *iter = nullptr;
     string tableName;
     vector<Attribute> attrs;
     vector<string> attrNames;
@@ -125,7 +135,11 @@ public:
 
     ~TableScan()
     {
-        iter->close();
+        if (iter != nullptr)
+        {
+            iter->close();
+            delete iter;
+        }
     };
 };
 
@@ -134,7 +148,7 @@ class IndexScan : public Iterator
     // A wrapper inheriting Iterator over IX_IndexScan
 public:
     RelationManager &rm;
-    RM_IndexScanIterator *iter;
+    RM_IndexScanIterator *iter = nullptr;
     string tableName;
     string attrName;
     vector<Attribute> attrs;
@@ -200,7 +214,11 @@ public:
 
     ~IndexScan()
     {
-        iter->close();
+        if (iter != nullptr)
+        {
+            iter->close();
+            delete iter;
+        }
     };
 };
 
@@ -226,16 +244,18 @@ class Project : public Iterator
 {
     // Projection operator
 public:
+    // Assumes that attrNames to project are all valid attributes of tuples from the underlying input Iterator.
     Project(Iterator *input,
-            const vector<string> &attrNames) : iter_{input}
+            const vector<string> &attrNames) : iter_{input}, attrNames_{attrNames}
     {
         iter_->getAttributes(attrsBeforeProjection_);
-        for (auto a : attrsBeforeProjection_)
+        for (auto aname : attrNames_)
         {
-            if (std::find(attrNames.begin(), attrNames.end(), a.name) != attrNames.end())
+            auto matchingAttr = [aname](Attribute a) { return aname == a.name; };
+            auto match = std::find_if(attrsBeforeProjection_.begin(), attrsBeforeProjection_.end(), matchingAttr);
+            if (match != attrsBeforeProjection_.end())
             {
-                attrs_.push_back(a);
-                attrNames_.push_back(a.name);
+                attrs_.push_back(*match);
             }
         }
     };

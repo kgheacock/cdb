@@ -224,7 +224,8 @@ IMPORTANT, PLEASE READ: All methods below this comment (other than the construct
           const vector<string> &attributeNames, // a list of projected attributes
           RBFM_ScanIterator &rbfm_ScanIterator);
 
-  RC project(void *recordBefore, void *recordAfter, vector<Attribute> recordDescriptor, vector<string> &attributeNames);
+  static int getNullIndicatorSize(int fieldCount);
+  static bool fieldIsNull(char *nullIndicator, int i);
 
 public:
   friend class RBFM_ScanIterator;
@@ -251,9 +252,6 @@ private:
   unsigned getPageFreeSpaceSize(void *page);
   unsigned getRecordSize(const vector<Attribute> &recordDescriptor, const void *data);
 
-  static int getNullIndicatorSize(int fieldCount);
-  static bool fieldIsNull(char *nullIndicator, int i);
-
   void setRecordAtOffset(void *page, unsigned offset, const vector<Attribute> &recordDescriptor, const void *data);
   void getRecordAtOffset(void *record, int32_t offset, const vector<Attribute> &recordDescriptor, void *data);
 
@@ -265,7 +263,6 @@ private:
   void reorganizePage(void *page);
 
   void getAttributeFromRecord(void *page, unsigned offset, unsigned attrIndex, AttrType type, void *data);
-  void getAttributeFromRecord(void *record, unsigned attrIndex, AttrType type, void *data);
 };
 
 #endif
