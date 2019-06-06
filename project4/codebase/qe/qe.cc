@@ -104,7 +104,8 @@ RC Filter::getNextTuple(void *data)
     if (iter_tuple == nullptr)
         return -1;
 
-    while (iter_->getNextTuple(iter_tuple) != QE_EOF) {
+    while (iter_->getNextTuple(iter_tuple) != QE_EOF)
+    {
 
         /* For simplified Filter, we only compare with:
          *   - the tuple we just got, or
@@ -180,7 +181,7 @@ RC evalPredicate(bool &result,
     if (rc != SUCCESS)
         return rc;
 
-    Value leftValue = { leftAttr.type, leftKey };
+    Value leftValue = {leftAttr.type, leftKey};
 
     // Get rightValue.
     Value rightValue;
@@ -201,13 +202,13 @@ RC evalPredicate(bool &result,
             return rc;
         }
 
-        rightValue = { rightAttr.type, rightKey };
+        rightValue = {rightAttr.type, rightKey};
     }
     else
     {
         rightValue = condition.rhsValue;
     }
-    
+
     result = leftValue.compare(&rightValue, condition.op);
 
     free(leftKey);
@@ -217,3 +218,43 @@ RC evalPredicate(bool &result,
     return SUCCESS;
 }
 
+RC INLJoin::getNextTuple(void *data)
+{
+    RC rcRight;
+    void *leftTuple = malloc(PAGE_SIZE);
+    RC rcLeft = left->getNextTuple(leftTuple);
+    void *rightTuple = malloc(PAGE_SIZE);
+    void *leftValueData;
+    Value leftValue;
+    leftValue.type = joinAttr.type;
+    Value rightValue;
+    rightValue.type = joinAttr.type;
+    while (rcLeft == SUCCESS)
+    {
+        RecordBasedFileManager::getColumnFromTuple(leftTuple, leftDescriptor, condition.lhsAttr, leftValue.data);
+        //Do we already have an iterator
+        if (Value::compare(right->key, leftValue.data, joinAttr.type) != 0)
+            right->setIterator(leftValue.data, leftValue.data, true, true);
+        rcRight = right->getNextTuple(rightTuple);
+        //leftValue is not present in the right table
+        if (rcRight == IX_EOF)
+        {
+            free(leftValue.data);
+            memset(leftTuple, 0, PAGE_SIZE);
+            memset(rightTuple, 0, PAGE_SIZE);
+            rcLeft = left->getNextTuple(leftTuple);
+            continue;
+        }
+        //leftValue = rightValue{
+        else
+        {
+            concat(leftTuple, rightTuple, data);
+            free(leftTuple);
+            free(rightTuple);
+            free(leftValue.data);
+            return SUCCESS;
+        }
+    }
+    if (rcLeft == IX_EOF)
+        return rcLeft;
+}

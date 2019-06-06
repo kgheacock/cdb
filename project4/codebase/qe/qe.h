@@ -7,7 +7,7 @@
 #include "../rbf/rbfm.h"
 #include "../rm/rm.h"
 #include "../ix/ix.h"
-#define QE_EOF (-1)  // end of the index scan
+#define QE_EOF (-1) // end of the index scan
 #define QE_NO_SUCH_ATTR (-2)
 #define QE_MISMATCHED_ATTR_TYPES (-3)
 
@@ -33,10 +33,10 @@ struct Value
     void *data;    // value
     int compare(const Value *rhs);
     bool compare(const Value *rhs, const CompOp op);
-    int compare(const void *key, const void *value, const AttrType attrType);
-    int compare(const int key, const int value);
-    int compare(const float key, const float value);
-    int compare(const char *key, const char *value);
+    static int compare(const void *key, const void *value, const AttrType attrType);
+    static int compare(const int key, const int value);
+    static int compare(const float key, const float value);
+    static int compare(const char *key, const char *value);
 };
 
 struct Condition
@@ -207,18 +207,19 @@ public:
 class Filter : public Iterator
 {
     // Filter operator
-    public:
-        Filter(Iterator *input,               // Iterator of input R
-               const Condition &condition     // Selection condition
-        ) : iter_ {input}, cond_ {condition} {};
-        ~Filter() {};
+public:
+    Filter(Iterator *input,           // Iterator of input R
+           const Condition &condition // Selection condition
+           ) : iter_{input}, cond_{condition} {};
+    ~Filter(){};
 
-        RC getNextTuple(void *data);
-        // For attribute in vector<Attribute>, name it as rel.attr
-        void getAttributes(vector<Attribute> &attrs) const;
-    private:
-        Iterator *iter_;
-        const Condition cond_;
+    RC getNextTuple(void *data);
+    // For attribute in vector<Attribute>, name it as rel.attr
+    void getAttributes(vector<Attribute> &attrs) const;
+
+private:
+    Iterator *iter_;
+    const Condition cond_;
 };
 
 class Project : public Iterator
@@ -226,7 +227,7 @@ class Project : public Iterator
     // Projection operator
 public:
     Project(Iterator *input,
-            const vector<string> &attrNames) : iter_ {input}
+            const vector<string> &attrNames) : iter_{input}
     {
         iter_->getAttributes(attrsBeforeProjection_);
         for (auto a : attrsBeforeProjection_)
@@ -258,18 +259,38 @@ public:
     INLJoin(Iterator *leftIn,          // Iterator of input R
             IndexScan *rightIn,        // IndexScan Iterator of input S
             const Condition &condition // Join condition
-    ){};
+            ) : left(leftIn), right(rightIn), condition(condition), wasEqual(false)
+    {
+        left->getAttributes(leftDescriptor);
+        right->getAttributes(rightDescriptor);
+        for (Attribute attr : leftDescriptor)
+        {
+            if (attr.name.compare(condition.lhsAttr) == 0)
+            {
+                joinAttr = attr;
+                return;
+            }
+        }
+        throw "Join attribute not found in record descriptor";
+    };
     ~INLJoin(){};
 
-    RC getNextTuple(void *data) { return QE_EOF; };
+    RC getNextTuple(void *data);
     // For attribute in vector<Attribute>, name it as rel.attr
     void getAttributes(vector<Attribute> &attrs) const {};
+    Iterator *left;
+    IndexScan *right;
+    void *previousLeft;
+    vector<Attribute> leftDescriptor;
+    vector<Attribute> rightDescriptor;
+    Attribute joinAttr;
+    bool wasEqual;
+    const Condition condition;
 };
 
 RC evalPredicate(bool &result,
                  const void *leftTuple, const Condition condition, const void *rightTuple,
                  const vector<Attribute> leftAttrs,
                  const vector<Attribute> rightAttrs);
-
 
 #endif
