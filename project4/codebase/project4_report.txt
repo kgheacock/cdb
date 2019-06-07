@@ -1,16 +1,17 @@
 1. Basic information
-Team number (e.g., 01) : 
-#1 Student ID : 
-#1 Student Name : 
-#2 Student ID : 
-#2 Student Name : 
-#3 Student ID : 
-#3 Student Name : 
+Team number (e.g., 01) : 8
+#1 Student ID : 1499743
+#1 Student Name : Michael Farrill
+#2 Student ID : 1529397
+#2 Student Name : Allston Mickey
+#3 Student ID : 1592942
+#3 Student Name : Keith Heacock
 
 
 2. Catalog information about Index
 - Show what catalog information you store for an index. 
 
+We store the table name, attribute name, and file name of the index in the Index catalog.
 
 3. Index Nested Loop Join
 - Describe how your Index Nested Loop Join works.
